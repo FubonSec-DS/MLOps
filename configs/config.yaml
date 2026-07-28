@@ -1,0 +1,13 @@
+# Oracle
+oracle:
+  instant_client_dir: "instantclient-23.26"
+
+# Data pipeline
+data_pipeline:
+  test_1: 1000
+  test_2: 2000
+
+# Models
+models:
+  test_1: 100
+  test_2: 200
