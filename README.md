@@ -59,6 +59,7 @@ Fubon_MLOps/
 │   └── config.yaml        # Configuration file for the project
 ├── instantclient-23.26/   # Oracle Instant Client directory (for Windows)
 ├── legacy/                # Old code or scripts
+├── test/                  # Test scripts for fundamental functionalities
 └── src/                   # Core source code of the project
     ├── common/            # Tools and utilities used across the project
     │   ├── config.py      # Validation and loading of configuration files
@@ -127,6 +128,22 @@ test.py
   test.py:14:14 - error: Argument of type "Literal['2']" cannot be assigned to parameter "int_2" of type "int" in function "add" ...
 1 error, 0 warnings, 0 informations
 ```
+
+#### 3. Run Tests
+
+After checking out another developer's branch or pulling their changes, run the test suite with:
+
+```powershell
+uv run pytest
+```
+
+To run a specific test file:
+
+```powershell
+uv run pytest test/test_xxx.py
+```
+
+Make sure the database connection settings in `configs/.env` are configured before running database integration tests.
 
 ### AI Code Review
 
