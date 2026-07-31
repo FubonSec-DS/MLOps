@@ -2,73 +2,61 @@
 
 ## Branch Flow
 
+所有開發 branch 都應先透過 Pull Request 合併到 `dev`；整合完成後，再由 `dev` 透過 Pull Request 合併到 `main`。
+
 ```mermaid
 flowchart LR
-    A["dev/pipeline_a"] -->|Pull Request| D["dev"]
-    B["dev/pipeline_b"] -->|Pull Request| D
-    C["feature/*"] -->|Pull Request| D
-    D -->|Pull Request<br/>after integration| M["main"]
+    A["feature-xxx"] -->|Pull Request| D["dev"]
+    B["debug-xxx"] -->|Pull Request| D
+    C["pipeline-xxx"] -->|Pull Request| D["dev"]
+    D -->|Pull Request after integration| M["main"]
 ```
 
-| branch         | desc                                                                                   |
-| -------------- | -------------------------------------------------------------------------------------- |
-| main           | 正式且穩定的主分支。                                                                   |
-| dev            | 整合各功能分支的開發分支。                                                             |
-| other branches | 個人功能、資料管線或修正分支，例如 `dev/pipeline_a`、`dev/pipeline_b` 或 `feature/*`。 |
+| Branch      | 用途                                  |
+| ----------- | ------------------------------------- |
+| `main`      | 穩定版本與正式發布使用的主要 branch。 |
+| `dev`       | 整合各項開發內容的主要 branch。       |
+| `<purpose>` | 以 `dev` 為基礎建立的開發 branch。    |
 
-原則上不要直接在 `main` 或 `dev` 上開發，也不能直接 push 到這兩個受保護分支。
+由於 repository 已經存在 `dev` branch，不可使用 `dev/<branch-name>` 格式，例如 `dev/xxx`。Git 會將 `dev` 視為既有的 ref，因而無法再建立其下的 branch。
 
 ## Getting Started
 
-先同步最新的 `dev`：
+先取得遠端最新狀態，再從 `dev` 建立工作 branch：
 
 ```powershell
 git fetch origin --prune
 git switch dev
 git pull --ff-only origin dev
-git switch -c dev/<your-branch-name>
-```
-
-例如：
-
-```powershell
-git switch -c dev/pipeline_a
-```
-
-分支名稱建議使用小寫英文、數字與連字號或斜線，例如：
-
-```text
-dev/pipeline_a
-dev/pipeline_b
-dev/fix_missing
+git switch -c dev-<purpose>
 ```
 
 ## Validation Before Commit
 
-在 commit 和 push 前，請先依照 `README.md` 完成本地 `Ruff` 與 `Pyright` 驗證，確保程式碼符合規範。如果檢查失敗，請先修正問題，再重新執行檢查。
+在 commit 和 push 前，請依照專案 `README.md` 的說明執行驗證。至少確認程式碼格式、lint 與型別檢查通過。
 
-## Commit message
+## Commit Message
 
-Commit message 建議使用以下格式：
+Commit message 使用以下格式：
 
 ```text
 <type>: <short description>
 ```
 
-常用的 `type`：
+常用的 `type` 如下：
 
-| Type       | 用途             |
-| ---------- | ---------------- |
-| `feat`     | 新增功能         |
-| `fix`      | 修正錯誤         |
-| `docs`     | 文件修改         |
-| `test`     | 測試或測試流程   |
-| `ci`       | CI/CD 設定       |
-| `refactor` | 不改變功能的重構 |
-| `chore`    | 一般維護         |
-| `minor`    | 小幅修改或微調   |
+| Type       | 用途                           |
+| ---------- | ------------------------------ |
+| `feat`     | 新增功能                       |
+| `fix`      | 修正錯誤                       |
+| `docs`     | 文件變更                       |
+| `test`     | 新增或修改測試                 |
+| `ci`       | CI/CD 設定變更                 |
+| `refactor` | 重構，不改變外部行為           |
+| `chore`    | 維護性工作                     |
+| `minor`    | 小幅變更，通常不影響功能或行為 |
 
-範例：
+Commit message 應簡潔描述實際變更，並以動詞開頭，例如 `add`、`fix`、`update` 或 `remove`。
 
 ```text
 feat: add training pipeline configuration
@@ -77,21 +65,21 @@ test: verify dev branch protection workflow
 docs: update contributing guide
 ```
 
-請使用簡短、清楚、動詞開頭的描述，例如 `add`、`fix`、`update`、`remove`。
-
 ## Create Pull Request
 
-將功能分支推送到遠端：
+完成修改並通過驗證後，推送工作 branch：
 
 ```powershell
-git push -u origin dev/<your-branch-name>
+git push -u origin <your-branch-name>
 ```
 
-- 功能分支 PR 的目標分支是 `dev`。
-- 只有完成整合並準備發布的內容，才建立 `dev` 到 `main` 的 PR。
-- 使用 Repo 提供的 PR Template，完整填寫 Description、Implementation details、Change Type、Impact Scope 與 Validation。
-- 如果有相關 Issue，請在 Related Issue 中連結；沒有則填寫 `None`。
-- 只有真正完成的檢查才勾選 Validation 項目。
+接著在 GitHub 建立 Pull Request：
+
+- 開發 branch 的目標 branch 應為 `dev`。
+- `dev` 整合完成後，才建立以 `main` 為目標的 Pull Request。
+- 請填寫 PR template，包括變更說明、實作細節、變更類型、影響範圍與驗證方式。
+- 若沒有對應 Issue，請在 Related Issue 欄位填寫 `None`。
+- 建立 PR 前，確認所有必要的 Validation 已完成。
 
 ## Merge Pull Request
 
@@ -118,7 +106,7 @@ PR 必須符合上述條件，才能進行合併。
 
 ## Conflict Resolution
 
-若 `dev` 在 PR 期間有新變更，先更新本地 `dev`：
+如果 PR 發生 conflict，先更新本地的 `dev`：
 
 ```powershell
 git fetch origin --prune
@@ -126,14 +114,14 @@ git switch dev
 git pull --ff-only origin dev
 ```
 
-再回到自己的功能分支並合併最新 `dev`：
+切回你的工作 branch，合併最新的 `dev`：
 
 ```powershell
-git switch dev/<your-branch-name>
+git switch <your-branch-name>
 git merge dev
 ```
 
-解決衝突後：
+解決衝突後，確認檔案內容並提交：
 
 ```powershell
 git add <resolved-files>
@@ -141,13 +129,11 @@ git commit
 git push
 ```
 
-Push 新 commit 後，CI 會重新執行；原有 approval 可能需要重新取得。
+Push 後請等待 CI 檢查完成，必要時重新取得 reviewer approval。
 
 ## After Merge
 
-合併完成後，GitHub 會自動刪除一般功能分支。受保護的 `dev` 與 `main` 不會因此被刪除。
-
-本地端同步並清理遠端追蹤資訊：
+PR 合併後，更新本地 branch：
 
 ```powershell
 git fetch origin --prune
@@ -155,25 +141,27 @@ git switch dev
 git pull --ff-only origin dev
 ```
 
-若本地仍保留已合併的功能分支，可以刪除：
+工作 branch 已經合併且不再使用時，可以刪除本地 branch：
 
 ```powershell
-git branch -d dev/<your-branch-name>
+git branch -d <your-branch-name>
 ```
+
+若 Git 判斷 branch 尚未合併，請先確認內容確實已合併，再視需要使用 `-D`。
 
 ## Review PR
 
-不要直接把別人的 PR 混入自己的開發分支。需要在地端試跑時，可以建立獨立的 review branch：
+如需在本地檢查尚未合併的 PR，可以建立 review branch：
 
 ```powershell
 git fetch origin pull/<PR-number>/head:review/pr-<PR-number>
 git switch review/pr-<PR-number>
 ```
 
-完成測試後切回自己的分支：
+Review 完成後切回自己的工作 branch：
 
 ```powershell
-git switch dev/<your-branch-name>
+git switch <your-branch-name>
 ```
 
-Review branch 不需要 push；PR 的意見與核准請直接在 GitHub 上提交。
+Review branch 不應直接 push；請在 GitHub 的 Pull Request 介面提交 review 結果。
