@@ -1,5 +1,7 @@
 # Contributing Guide
 
+Updated: 2026-07-31
+
 ## Branch Flow
 
 所有開發 branch 都應先透過 Pull Request 合併到 `dev`；整合完成後，再由 `dev` 透過 Pull Request 合併到 `main`。
