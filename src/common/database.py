@@ -1,11 +1,13 @@
 from pathlib import Path
 
 import oracledb
-import polars as pl
+import pandas as pd
+
+from src.common.config import get_settings
 
 
 class OracleDB:
-    """A class to handle Oracle database operations using oracledb and polars."""
+    """A class to handle Oracle database operations using oracledb and pandas."""
 
     def __init__(self, user: str, password: str, dsn: str, instant_client_path: Path) -> None:
         """Initialize OracleDB.
@@ -25,26 +27,36 @@ class OracleDB:
         if oracledb.is_thin_mode():
             oracledb.init_oracle_client(lib_dir=str(instant_client_path))
 
-    def query(self, query: str, params: dict | None = None) -> pl.DataFrame:
-        """Execute a query and return the result as a Polars DataFrame.
+    def query(self, query: str, params: dict | None = None) -> pd.DataFrame:
+        """Execute a query and return the result as a Pandas DataFrame.
 
         Args:
             query (str): The SQL query to fetch data from the database.
             params (dict | None): Optional parameters for the query, e.g., {"param1": value1, "param2": value2}.
 
         Returns:
-            pl.DataFrame: The result of the query as a Polars DataFrame.
+            pd.DataFrame: The result of the query as a Pandas DataFrame.
 
         """
         conn = oracledb.connect(**self.connection_configs)
+        cursor = conn.cursor()
 
         try:
-            df = pl.read_database(query, conn, execute_options={"parameters": params} if params else None)
+            cursor.execute(query, params or {})
+            description = cursor.description
+
+            if description is None:
+                return pd.DataFrame()
+
+            else:
+                columns = [column[0] for column in description]
+                rows = cursor.fetchall()
+
+                return pd.DataFrame.from_records(rows, columns=columns)
 
         finally:
+            cursor.close()
             conn.close()
-
-        return df
 
     def execute(self, query: str, params: dict | None = None) -> None:
         """Execute a query without returning any result, like creating or dropping tables.
@@ -97,3 +109,20 @@ class OracleDB:
         finally:
             cursor.close()
             conn.close()
+
+
+def get_oracle_db() -> OracleDB:
+    """Get an instance of OracleDB with configuration from environment variables.
+
+    Returns:
+        OracleDB: An instance of the OracleDB class.
+
+    """
+    settings = get_settings()
+
+    return OracleDB(
+        user=settings.oracle.user,
+        password=settings.oracle.password.get_secret_value(),
+        dsn=settings.oracle.dsn,
+        instant_client_path=settings.oracle.instant_client_path,
+    )

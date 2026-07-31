@@ -29,6 +29,9 @@ instantclient-23.26/
 # Ruff cache
 .ruff_cache/
 
+# Pytest cache
+.pytest_cache/
+
 # Oracle Instant Client
 instantclient-23.26/
 instantclient-*/
