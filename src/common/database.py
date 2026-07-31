@@ -58,7 +58,6 @@ class OracleDB:
             cursor.close()
             conn.close()
 
-
     def execute(self, query: str, params: dict | None = None) -> None:
         """Execute a query without returning any result, like creating or dropping tables.
 
