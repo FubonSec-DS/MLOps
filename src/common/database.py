@@ -1,128 +1,149 @@
+"""Shared Oracle client used by the DS_MASK runtime role."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from functools import cache
+from importlib.resources import files
 from pathlib import Path
+from typing import Any
 
 import oracledb
-import pandas as pd
+import polars as pl
 
-from src.common.config import get_settings
+from configs.configs_val.DB_configs import DatabaseCredentials, get_settings
+
+
+def read_sql(filename: str) -> str:
+    """Read one SQL file from the application SQL directory."""
+    return files("src.resources.queries").joinpath("sql", filename).read_text(encoding="utf-8").strip()
 
 
 class OracleDB:
-    """A class to handle Oracle database operations using oracledb and pandas."""
+    """Small Oracle wrapper with explicit transaction support."""
 
-    def __init__(self, user: str, password: str, dsn: str, instant_client_path: Path) -> None:
-        """Initialize OracleDB.
-
-        Args:
-            user (str): The username for the Oracle database.
-            password (str): The password for the Oracle database.
-            dsn (str): The Data Source Name for the Oracle database, including host, port, and service name.
-            instant_client_path (Path): Path to the Oracle Instant Client directory.
-
-        """
-        # Connection parameters
-        self.connection_configs = {"user": user, "password": password, "dsn": dsn}
-        self.batch_size = 500000
-
-        # Only initialize the Oracle client if in thin mode
+    def __init__(self, credentials: DatabaseCredentials, instant_client_path: Path) -> None:
+        """Store one role's credentials and initialize the Oracle thick client."""
+        self.connection_configs = {
+            "user": credentials.user,
+            "password": credentials.password,
+            "dsn": credentials.dsn,
+        }
         if oracledb.is_thin_mode():
             oracledb.init_oracle_client(lib_dir=str(instant_client_path))
 
-    def query(self, query: str, params: dict | None = None) -> pd.DataFrame:
-        """Execute a query and return the result as a Pandas DataFrame.
+    def connect(self) -> oracledb.Connection:
+        """Open a connection owned by the caller."""
+        return oracledb.connect(**self.connection_configs)
 
-        Args:
-            query (str): The SQL query to fetch data from the database.
-            params (dict | None): Optional parameters for the query, e.g., {"param1": value1, "param2": value2}.
-
-        Returns:
-            pd.DataFrame: The result of the query as a Pandas DataFrame.
-
-        """
-        conn = oracledb.connect(**self.connection_configs)
-        cursor = conn.cursor()
-
+    @contextmanager
+    def connection(self) -> Iterator[oracledb.Connection]:
+        """Yield a connection and always close it."""
+        conn = self.connect()
         try:
-            cursor.execute(query, params or {})
-            description = cursor.description
-
-            if description is None:
-                return pd.DataFrame()
-
-            else:
-                columns = [column[0] for column in description]
-                rows = cursor.fetchall()
-
-                return pd.DataFrame.from_records(rows, columns=columns)
-
+            yield conn
         finally:
-            cursor.close()
             conn.close()
 
-    def execute(self, query: str, params: dict | None = None) -> None:
-        """Execute a query without returning any result, like creating or dropping tables.
-
-        Args:
-            query (str): The SQL query to execute.
-            params (dict | None): Optional parameters for the query, e.g., {"param1": value1, "param2": value2}.
-
-        """
-        conn = oracledb.connect(**self.connection_configs)
-        cursor = conn.cursor()
-
+    @contextmanager
+    def transaction(self) -> Iterator[oracledb.Connection]:
+        """Commit all DML together or roll it all back."""
+        conn = self.connect()
         try:
-            cursor.execute(query, params or {})
+            yield conn
             conn.commit()
-
-        finally:
-            cursor.close()
-            conn.close()
-
-    def insert(self, query: str, rows: list[dict]) -> int:
-        """Insert rows into database using ``executemany`` in batches.
-
-        Args:
-            query (str): SQL insert statement with named bind variables.
-            rows (list[dict]): Data to insert, e.g., [{"col1": val1, "col2": val2}, ...].
-
-        Returns:
-            int: Total number of inserted rows.
-
-        Raises:
-            Exception: If any error occurs during the insertion, the transaction is rolled back and the exception
-
-        """
-        conn = oracledb.connect(**self.connection_configs)
-        cursor = conn.cursor()
-
-        try:
-            for i in range(0, total_num := len(rows), self.batch_size):
-                cursor.executemany(query, rows[i : i + self.batch_size])
-
-            conn.commit()
-
-            return total_num
-
         except Exception:
             conn.rollback()
             raise
-
         finally:
-            cursor.close()
             conn.close()
 
+    def query(
+        self,
+        query: str,
+        params: dict[str, Any] | None = None,
+    ) -> pl.DataFrame:
+        """Execute a SELECT and return a Polars DataFrame."""
+        with self.connection() as connection:
+            return pl.read_database(
+                query,
+                connection,
+                infer_schema_length=None,
+                execute_options={"parameters": params} if params else None,
+            )
 
-def get_oracle_db() -> OracleDB:
-    """Get an instance of OracleDB with configuration from environment variables.
+    def require_table_privileges(
+        self,
+        table_schema: str,
+        table_name: str,
+        privileges: Sequence[str],
+    ) -> None:
+        """Fail before mutation when the current identity lacks table privileges."""
+        required = {privilege.upper() for privilege in privileges}
+        result = self.query(
+            """
+            SELECT DISTINCT PRIVILEGE
+            FROM ALL_TAB_PRIVS
+            WHERE TABLE_SCHEMA = :table_schema
+              AND TABLE_NAME = :table_name
+              AND GRANTEE IN (
+                  SELECT USER FROM DUAL
+                  UNION ALL
+                  SELECT ROLE FROM SESSION_ROLES
+              )
+            """,
+            {
+                "table_schema": table_schema.upper(),
+                "table_name": table_name.upper(),
+            },
+        )
+        granted = {str(value).upper() for value in result.get_column("PRIVILEGE").to_list()}
+        missing = sorted(required - granted)
+        if missing:
+            privilege_list = ", ".join(missing)
+            qualified_table = f"{table_schema.upper()}.{table_name.upper()}"
+            raise PermissionError(
+                f"Database identity lacks {privilege_list} on {qualified_table}; "
+                f"ask the table owner/DBA to GRANT {privilege_list} ON {qualified_table}"
+            )
 
-    Returns:
-        OracleDB: An instance of the OracleDB class.
+    def execute(
+        self,
+        query: str,
+        params: dict[str, Any] | None = None,
+        *,
+        connection: oracledb.Connection | None = None,
+    ) -> int:
+        """Execute one DML/DDL statement and return its affected row count."""
+        if connection is None:
+            with self.transaction() as connection:
+                return self.execute(query, params, connection=connection)
+        with connection.cursor() as cursor:
+            cursor.execute(query, params or {})
+            return cursor.rowcount
 
-    """
+    def insert(
+        self,
+        query: str,
+        rows: Sequence[dict[str, Any]],
+        *,
+        connection: oracledb.Connection | None = None,
+    ) -> int:
+        """Execute a named-bind INSERT in batches."""
+        if not rows:
+            return 0
+        if connection is None:
+            with self.transaction() as connection:
+                return self.insert(query, rows, connection=connection)
+        with connection.cursor() as cursor:
+            for start in range(0, len(rows), 500_000):
+                cursor.executemany(query, rows[start : start + 500_000])
+            return len(rows)
+
+
+@cache
+def get_query_database() -> OracleDB:
+    """Return the shared DS_MASK client used for all runtime reads and writes."""
     settings = get_settings()
-
-    return OracleDB(
-        user=settings.oracle.user,
-        password=settings.oracle.password.get_secret_value(),
-        dsn=settings.oracle.dsn,
-        instant_client_path=settings.oracle.instant_client_path,
-    )
+    return OracleDB(settings.oracle.query, settings.oracle.instant_client_path)

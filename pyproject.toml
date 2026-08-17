@@ -6,27 +6,64 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "oracledb>=4.0.2",
-    "pandas>=3.0.5",
+    "pandas>=3.0.3",
+    "polars>=1.42.1",
     "pydantic>=2.13.4",
+    "python-dateutil>=2.9.0",
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
+    "scikit-learn>=1.6.0",
+    "scipy>=1.18.0",
+    "xgboost>=3.0.0",
 ]
+
+[project.scripts]
+mlops-refresh-features = "scripts.refresh_features:main"
+mlops-refresh-population = "scripts.refresh_population:main"
+mlops-refresh-training-population = "scripts.refresh_training_population:main"
+mlops-retrain = "scripts.run_retrain:main"
+mlops-predict = "scripts.run_prediction:main"
+mlops-validate-pretrain = "scripts.validate_pretrain_readiness:main"
+mlops-pretrain = "scripts.run_pretrain:main"
+
+[build-system]
+requires = ["uv_build>=0.11.15,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["src", "configs", "scripts"]
+module-root = "."
 
 [dependency-groups]
 dev = [
     "pyright>=1.1.411",
-    "pytest>=9.1.1",
     "ruff>=0.16.0",
 ]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 120
-exclude = ["legacy/*", "test/*"]
+exclude = ["legacy/**", "src/resources/queries/sql/**", ".venv/**"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "D", "G", "UP", "N", "B", "S", "PTH", "SIM", "ANN", "RUF"]
-ignore = ["D100", "D104", "D203", "D213"]
+ignore = ["D100", "D104", "D203", "D213", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/models/training.py" = ["N803", "N806"]
+"src/models/evaluation.py" = ["N803"]
+"src/models/prediction.py" = ["N803", "S301"]
+"src/pipelines/retrain.py" = ["N806"]
+"src/pipelines/predict.py" = ["N806"]
+"src/models/versioning.py" = ["S608"]
+"src/resources/queries/feature_queries.py" = ["S608"]
+"src/resources/queries/population_queries.py" = ["S608"]
+"src/resources/population.py" = ["S608"]
+"src/resources/sampling.py" = ["S608"]
+"src/common/database.py" = ["ANN401"]
+"configs/configs_val/DB_configs.py" = ["N999"]
+"tests/*" = ["D101", "D102"]
+"scripts/*" = ["D103"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -38,10 +75,9 @@ docstring-code-line-length = "dynamic"
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
 venv = ".venv"
-include = ["src"]
-exclude = ["**/__pycache__", ".venv", "**/.*", "**/node_modules", ".git", "test"]
+venvPath = "."
+include = ["src", "scripts", "tests", "main.py"]
+exclude = ["legacy", "src/resources/queries/sql", "**/__pycache__", ".venv", "**/.*", ".git"]
+extraPaths = ["."]
 reportMissingImports = true
 reportMissingTypeStubs = false
-
-[tool.pytest.ini_options]
-pythonpath = ["."]

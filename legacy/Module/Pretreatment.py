@@ -83,95 +83,6 @@ def reduce_mem_usage(df, verbose=True):
     return df
 
 
-# In[ ]:
-
-
-# def read_feature_by_sampling(table_name,ym,this_prod,mother):
-#     from Sql_module import get_SQL_raw_data
-#     query = f"""
-#         SELECT A.* FROM DS_SEC.{table_name} A
-#         INNER JOIN (SELECT CUSTOMER_ID
-#             FROM MLOPS_POPULATION_SAMPLING
-#             WHERE YYYYMM = '{ym}' AND PRODUCT = '{this_prod}' AND POPULATION = '{mother}')B
-#         ON A.CUSTOMER_ID = B.CUSTOMER_ID
-#         WHERE A.YYYYMM = '{ym}'
-#     """
-
-#     try:
-#         df = get_SQL_raw_data2(query=query)
-#         return df
-#     except Exception as e:
-#         print(f"查詢失敗:{table_name}-{e}")
-#         return None
-
-
-# In[ ]:
-
-
-# def read_feature_by_all(table_name,ym,this_prod,mother):
-#     from Sql_module import get_SQL_raw_data
-#     query1 = f"""
-#         SELECT A.* FROM DS_SEC.{table_name} A
-#         INNER JOIN (SELECT CUSTOMER_ID
-#             FROM MLOPS_POPULATION
-#             WHERE YYYYMM = '{ym}' AND SEGMENT = '{mother}')B
-#         ON A.CUSTOMER_ID = B.CUSTOMER_ID
-#         WHERE A.YYYYMM = '{ym}'
-#     """
-#     query2 = f"""
-#     SELECT A.* FROM DS_SEC.{table_name} A
-#     INNER JOIN (SELECT CUSTOMER_ID
-#         FROM MLOPS_POPULATION
-#         WHERE YYYYMM = '{ym}')B
-#     ON A.CUSTOMER_ID = B.CUSTOMER_ID
-#     WHERE A.YYYYMM = '{ym}'
-#     """
-
-#     try:
-#         if mother == '不分潛客':
-#             df = get_SQL_raw_data2(query=query2)
-#         else:
-#             df = get_SQL_raw_data2(query=query1)
-#         return df
-#     except Exception as e:
-#         print(f"查詢失敗:{table_name}-{e}")
-#         return None
-
-
-# In[ ]:
-
-
-# def build_sampled_feature(ym,this_prod,mother, papu_and_y = pd.DataFrame()):
-#     merge_df = None
-#     for i, table in enumerate(table_append_list_2025):
-#         print(f"讀取中:{table}")
-#         if len(papu_and_y)>0:
-#             df = read_feature_by_all(table,ym,this_prod,mother)
-#             df = df[df['customer_id'].isin(papu_and_y['customer_id'])]
-#         else:
-#             df = read_feature_by_sampling(table,ym,this_prod,mother)
-
-
-#         if df is None:
-#             print(f"{table_name}-未撈到資料")
-#             continue
-#         df.sort_values(["customer_id","yyyymm"], inplace=True)
-#         df = df.reset_index(drop = True)
-
-#         if merge_df is None:
-#             merge_df = df
-#         else:
-#             df = df.drop(columns = ["customer_id","yyyymm"],errors = "ignore")
-#             merge_df = pd.concat([merge_df,df],axis = 1, join='outer')
-# #         print(f"每合併一次空值:{merge_df['yyyymm'].isnull().sum()}")
-#         print(f"目前資料數:{len(merge_df)}-{len(merge_df.columns)}")
-
-#     return merge_df
-
-
-
-# In[ ]:
-
 
 def read_feature_by_sampling(ym,this_prod,mother,drop_key_word,Fill_zero):
     from Sql_module import get_SQL_raw_data2
@@ -907,7 +818,7 @@ def get_feature_by_SOP_202503(do_ym_lst, mother = None, drop_key_word = [], papu
         print(f"特徵共{len(feature_sample)}筆")
 
         concat_df = pd.concat([feature_sample,papu_and_y_yyyymm],axis = 1)
-#         concat_df = pd.merge(feature_sample, papu_and_y_yyyymm, how='left', on=['customer_id','yyyymm'])
+        concat_df = pd.merge(feature_sample, papu_and_y_yyyymm, how='left', on=['customer_id','yyyymm'])
         end_time2 = time.time()
         print(f'母體合併,  runtime: {round((end_time2-st_time2)/60)} minutes')
         print(f"特徵空值:{concat_df['yyyymm'].isnull().sum()}")
@@ -1540,7 +1451,7 @@ def combine_multi_year_df(do_ym_lst, concat_df_outcome):
 
 # In[19]:
 
-
+# 額外縮減至每個年月最多10萬筆
 def if_to_large_down_sampling(do_ym_lst, concat_df_outcome, limit_size=500000):
     st_time = time.time()
     for ym in sorted(do_ym_lst)[0:-1] :
@@ -1565,70 +1476,6 @@ def if_to_large_down_sampling(do_ym_lst, concat_df_outcome, limit_size=500000):
     end_time = time.time()
     print(f'if_to_large_down_sampling,  runtime: {round((end_time-st_time)/60)} minutes')
     return concat_df_outcome
-
-
-# In[20]:
-
-
-def if_large_down_sampling_from_papu_and_y(do_ym_lst, papu_and_y, cust_source, limit_size=500000):
-    st_time = time.time()
-    papu_and_y['yyyymm'] = papu_and_y['yyyymm'].astype('int')
-    reduce_papu_and_y = papu_and_y[papu_and_y['yyyymm']==int(sorted(do_ym_lst)[-1])]
-
-    if cust_source == 'Fubon':
-        feature_file_path = config.feature_file_path_mlops
-    elif cust_source == 'Jihsun':
-        feature_file_path = config.feature_file_path_jihsun
-
-    for ym in sorted(do_ym_lst)[0:-1] :
-        print(f'-----Mapping CUST_{ym} info------')
-        #參數與宣告
-        check_path = feature_file_path + '/' + f'{ym}'
-        print(f'PATH: {check_path}')
-        exist_list = listdir(check_path)
-        #先抓客戶檔
-        df = pickle.load(open(check_path + '/' + f'CUST_{ym}.pickle', 'rb'))
-        df['yyyymm'] = df['yyyymm'].astype('int')
-        print(f'CUST_{ym}.pickle loading finished')
-
-        if (not papu_and_y[papu_and_y['yyyymm']==int(ym)].empty) :
-            # 抓取該yyyymm資料
-            papu_and_y_yyyymm = papu_and_y[papu_and_y['yyyymm']==int(ym)]
-
-            df_papu_and_y = pd.merge(df, papu_and_y_yyyymm, how='left', on=['customer_id','yyyymm'])
-            mask_papulation = df_papu_and_y['y'].notna()
-            papu_and_y_yyyymm = df_papu_and_y[mask_papulation]
-            papu_and_y_yyyymm['y'] = papu_and_y_yyyymm['y'].astype('int')
-            papu_and_y_yyyymm.reset_index(drop=True, inplace=True)
-            print(f'papu_and_y mapping finished with {len(papu_and_y_yyyymm.columns)} columns and {len(papu_and_y_yyyymm)} length ')
-
-            if len(papu_and_y_yyyymm) > limit_size:
-                print(f'starting down sampling (year:{ym}) ...')
-                papu_and_y_yyyymm_y0 = papu_and_y_yyyymm[papu_and_y_yyyymm['y']==0]
-                papu_and_y_yyyymm_y1 = papu_and_y_yyyymm[papu_and_y_yyyymm['y']==1]
-#                 papu_and_y_yyyymm_y0_downsampled = resample(papu_and_y_yyyymm_y0, random_state=42, n_samples=limit_size-len(papu_and_y_yyyymm_y1), replace=False)
-                #concat
-                n_y0_samples = limit_size - len(papu_and_y_yyyymm_y1)
-                if n_y0_samples <= 0 :
-                    print(f'warning , the amount of Y =1 {len(papu_and_y_yyyymm_y1)} exceed the limit size{limit_size} , so the amount of Y =1 and Y = 0 will become {limit_size//2}')
-                    papu_and_y_yyyymm_y1 = resample(papu_and_y_yyyymm_y1 , random_state=42 ,n_samples = limit_size//2, replace = len(papu_and_y_yyyymm_y1) < limit_size//2)
-                    n_y0_samples = limit_size//2
-                papu_and_y_yyyymm_y0_downsampled = resample(papu_and_y_yyyymm_y0 , random_state=42 ,n_samples = n_y0_samples,replace = True)
-                papu_and_y_yyyymm_downsampled = pd.concat([papu_and_y_yyyymm_y0_downsampled, papu_and_y_yyyymm_y1])
-                print(f'Successed!! down sampling (year:{ym})/ size:{len(papu_and_y_yyyymm_downsampled)}) ...')
-                print(papu_and_y_yyyymm_downsampled)
-                reduce_papu_and_y = reduce_papu_and_y.append(papu_and_y_yyyymm_downsampled)
-            else:
-                print(f'don"t need down sampling (year:{ym}/ size:{len(papu_and_y_yyyymm)}) ...')
-                reduce_papu_and_y = reduce_papu_and_y.append(papu_and_y_yyyymm)
-        else:
-            raise ValueError(f"年月:{ym} 筆數為0")
-    #最新月份
-    reduce_papu_and_y.reset_index(drop=True,inplace=True)
-    print("Running time : %.0f sec" %(time.time() - st_time))
-
-    return reduce_papu_and_y
-
 
 # In[21]:
 
@@ -2018,16 +1865,4 @@ def down_sampling_from_df(df, recommded_build_size):
     downsample_df = df_train_valid.groupby('yyyymm').apply(lambda group: downsample(group, target_size)).reset_index(drop=True)
 
     return pd.concat([downsample_df, backtest_ym_df])
-
-
-# In[1]:
-
-
-# !jupyter nbconvert --to script Pretreatment.ipynb
-
-
-# In[ ]:
-
-
-
 

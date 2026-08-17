@@ -1,0 +1,197 @@
+# Product catalog and model-tuning values. No credentials belong in this file.
+
+xgboost_profiles:
+  pretrain:
+    max_depth: 3
+    scale_pos_weight: 4.0
+    n_estimators: 100
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bylevel: 0.8
+    reg_lambda: 0.1
+    min_child_weight: 1.0
+    early_stopping_rounds: null
+  training:
+    max_depth: 3
+    scale_pos_weight: 4.0
+    n_estimators: 100
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bylevel: 0.8
+    reg_lambda: 0.1
+    min_child_weight: 1.0
+    early_stopping_rounds: null
+
+training_schedules:
+  standard:
+    train_months_count: 10
+    label_offset_months: 3
+    backtest_gap_months: 3
+    train_interval_months: 1
+  twelve_month:
+    train_months_count: 4
+    label_offset_months: 12
+    backtest_gap_months: 3
+    train_interval_months: 3
+  three_month:
+    train_months_count: 4
+    label_offset_months: 3
+    backtest_gap_months: 3
+    train_interval_months: 3
+
+population_profiles:
+  "非潛客":
+    sample_size: 150000
+    source_segments: ["非潛客"]
+  "潛客":
+    sample_size: 150000
+    source_segments: ["潛客"]
+  "不分潛客":
+    sample_size: 400000
+    source_segments: ["潛客", "非潛客"]
+
+bin_profiles:
+  default: [1.0, 0.62, 0.40, 0.31, 0.22, 0.0]
+  structure: [1.0, 0.065, 0.01, 0.004, 0.002, 0.0]
+  churn: [1.0, 0.9, 0.75, 0.6, 0.4, 0.0]
+
+hit_rate_profiles:
+  c20: [0.05, 0.10, 0.20]
+  c10: [0.03, 0.05, 0.10]
+  c05: [0.01, 0.03, 0.05]
+  c03: [0.005, 0.01, 0.03]
+  c01: [0.005, 0.01]
+
+products:
+  - name: "不限用途"
+    kind: standard
+    hit_rate_profile: c01
+    drop_keywords: [LOAN]
+  - name: "保險商品"
+    kind: standard
+    hit_rate_profile: c03
+    drop_keywords: [INSURANCE]
+  - name: "債券型基金"
+    kind: standard
+    hit_rate_profile: c05
+    drop_keywords: [FD]
+  - name: "儲蓄型保險商品"
+    kind: standard
+    hit_rate_profile: c03
+    drop_keywords: [INSURANCE]
+  - name: "台股信用交易"
+    kind: standard
+    hit_rate_profile: c10
+  - name: "台股定期定額"
+    kind: standard
+    hit_rate_profile: c10
+  - name: "海外股票定期定額"
+    kind: standard
+    hit_rate_profile: c10
+  - name: "基金"
+    kind: standard
+    hit_rate_profile: c05
+    drop_keywords: [FD]
+  - name: "基金定期定額"
+    kind: standard
+    hit_rate_profile: c05
+  - name: "境內結構型"
+    kind: standard
+    eligibility_suffix: "近三年舊戶"
+    populations: ["非潛客"]
+    bin_profile: structure
+    hit_rate_profile: c05
+    query_type: structure
+    drop_keywords: [SN, PRO_INVEST_FLSG]
+  - name: "境外結構型"
+    kind: standard
+    eligibility_suffix: "近三年舊戶"
+    populations: ["非潛客"]
+    bin_profile: structure
+    hit_rate_profile: c05
+    query_type: structure
+    drop_keywords: [SN, PRO_INVEST_FLSG]
+  - name: "平衡型基金"
+    kind: standard
+    hit_rate_profile: c05
+    drop_keywords: [FD]
+  - name: "投資型保險商品"
+    kind: standard
+    hit_rate_profile: c03
+    drop_keywords: [INSURANCE]
+  - name: "期貨"
+    kind: standard
+    hit_rate_profile: c10
+    drop_keywords: [FU_]
+  - name: "海外債"
+    kind: standard
+    hit_rate_profile: c05
+    drop_keywords: [FD]
+  - name: "海外股票"
+    kind: standard
+    eligibility_suffix: "近半年舊戶"
+    hit_rate_profile: c10
+  - name: "結構型商品"
+    kind: standard
+    eligibility_suffix: "近三年舊戶"
+    bin_profile: structure
+    hit_rate_profile: c05
+    query_type: structure
+    drop_keywords: [SN, PRO_INVEST_FLSG]
+  - name: "股票型基金"
+    kind: standard
+    hit_rate_profile: c05
+    drop_keywords: [FD]
+  - name: "雙向借券"
+    kind: standard
+    hit_rate_profile: c10
+    drop_keywords: [BSBL]
+  - name: "財管商品"
+    kind: standard
+    hit_rate_profile: c20
+
+  - name: "客群上送"
+    kind: explicit
+    business_target: "客群上送預測"
+    eligibility_column: "客群上送前季高交易量客戶R"
+    prediction_eligibility_column: "客群上送前季高交易量客戶P"
+    target_column: "客群上送Y"
+    populations: ["不分潛客"]
+    rank_bins: [0, 1000, 2000, 3000, 10000, 100000, 10000000]
+    training_schedule: three_month
+    query_type: special_3m
+  - name: "潛在高價值客戶"
+    kind: explicit
+    business_target: "潛在高價值客戶"
+    eligibility_column: "潛在高價值客戶前季高交易量客戶R"
+    prediction_eligibility_column: "潛在高價值客戶前季高交易量客戶P"
+    target_column: "潛在高價值客戶Y"
+    populations: ["不分潛客"]
+    rank_bins: [0, 500, 1000, 2000, 3000, 10000, 10000000]
+    query_type: special_3m
+    drop_keywords: [AMT, NUM, PROD, BNF, AUM, SAFETY, TURNOVER, DAY, NET_TXN, SEGMENT]
+    training_schedule: three_month
+  - name: "流失預警"
+    kind: explicit
+    business_target: "瞌睡客戶關懷"
+    eligibility_column: "流失預警近一年實動"
+    eligibility_values: [1]
+    target_column: "流失預警Y"
+    target_null_value: 1
+    populations: ["不分潛客"]
+    bin_profile: churn
+    hit_rate_profile: c10
+    query_type: churn
+    training_schedule: twelve_month
+  - name: "海外股流失預警"
+    kind: explicit
+    business_target: "瞌睡客戶關懷"
+    eligibility_column: "海外股流失預警近一年實動"
+    eligibility_values: [1]
+    target_column: "海外股流失預警Y"
+    target_null_value: 1
+    populations: ["不分潛客"]
+    bin_profile: churn
+    hit_rate_profile: c10
+    query_type: churn
+    training_schedule: twelve_month

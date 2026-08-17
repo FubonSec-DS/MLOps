@@ -1,0 +1,715 @@
+INSERT INTO {{POPULATION_TABLE}}
+WITH ACC AS (
+SELECT DISTINCT PARTY_ID,PARTY_ID_MASK FROM DM_S_VIEW.M_AC_ACCOUNT
+)
+
+SELECT A.CUSTOMER_ID
+    ,YYYYMM
+    ,nvl(SEGMENT,'潛客')SEGMENT
+    ,"98戶"
+    ,不限用途近一年舊戶
+    ,不限用途Y
+    ,保險商品近一年舊戶
+    ,保險商品Y
+    ,債券型基金近一年舊戶
+    ,債券型基金Y
+    ,儲蓄型保險商品近一年舊戶
+    ,儲蓄型保險商品Y
+    ,台股信用交易近一年舊戶
+    ,台股信用交易Y
+    ,台股定期定額近一年舊戶
+    ,台股定期定額Y
+    ,基金近一年舊戶
+    ,基金Y
+    ,基金定期定額近一年舊戶
+    ,基金定期定額Y
+    ,境內結構型近三年舊戶
+    ,境內結構型Y
+    ,境外結構型近三年舊戶
+    ,境外結構型Y
+    ,客群上送前季高交易量客戶R
+    ,客群上送前季高交易量客戶P
+    ,客群上送Y
+    ,平衡型基金近一年舊戶
+    ,平衡型基金Y
+    ,投資型保險商品近一年舊戶
+    ,投資型保險商品Y
+    ,期貨近一年舊戶
+    ,期貨Y
+    ,流失預警近一年實動
+    ,流失預警Y
+    ,海外股流失預警近一年實動
+    ,海外股流失預警Y
+    ,海外債近一年舊戶
+    ,海外債Y
+    ,海外股票近半年舊戶
+    ,海外股票Y
+    ,海外股票定期定額近一年舊戶
+    ,海外股票定期定額Y
+    ,潛在高價值客戶前季高交易量客戶R
+    ,潛在高價值客戶前季高交易量客戶P
+    ,潛在高價值客戶Y
+    ,結構型商品近三年舊戶
+    ,結構型商品Y
+    ,股票型基金近一年舊戶
+    ,股票型基金Y
+    ,財管商品近一年舊戶
+    ,財管商品Y
+    ,雙向借券近一年舊戶
+    ,雙向借券Y
+FROM DS_SEC.CF_CUSTID A
+
+INNER JOIN (
+    SELECT DISTINCT PARTY_ID_MASK as CUSTOMER_ID
+    FROM DM_S_VIEW.M_PT_CUSTOMER A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE CUST_TYPE_DESC = '自然人'
+)CT ON A.CUSTOMER_ID = CT.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT PARTY_ID,SNAP_YYYYMM,SEGMENT FROM(
+    SELECT PARTY_ID,SNAP_YYYYMM,SEGMENT,ROW_NUMBER() OVER (PARTITION BY PARTY_ID ORDER BY SEGMENT)SST FROM (
+    ----價值以上001 潛客無貼標002
+    SELECT PARTY_ID_MASK AS PARTY_ID,SNAP_YYYYMM, CASE WHEN NW_SEGMENT_CODE IN ('013','015','016','017','018') THEN '非潛客' ELSE '潛客' END SEGMENT 
+    FROM DM_S_VIEW.T_DR_ACCT_SEG A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE SNAP_YYYYMM = :ym)) 
+    WHERE SST = 1
+)S ON A.CUSTOMER_ID = S.PARTY_ID AND A.YYYYMM = S.SNAP_YYYYMM
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK as CUSTOMER_ID
+         , 1 AS "98戶"
+    FROM DM_S_VIEW.M_AC_ACCOUNT
+    WHERE substr(ACCT_NBR,5,2) = '98' and ACCT_VALID_FLAG = 'Y'
+)S98 ON A.CUSTOMER_ID = S98.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 不限用途近一年舊戶
+    FROM DM_S_VIEW.M_AT_LOAN_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym 
+        AND PROD_MTYPE_DESC = '不限用途借貸' 
+        and txn_type_detail_code = '052'
+)O1 ON A.CUSTOMER_ID = O1.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 不限用途Y
+    FROM DM_S_VIEW.M_AT_LOAN_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM') 
+        AND A.PROD_MTYPE_DESC = '不限用途借貸' 
+        and txn_type_detail_code = '052'
+)B1 ON A.CUSTOMER_ID = B1.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 保險商品近一年舊戶
+    FROM DM_S_VIEW.M_AT_INSURANCE_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+        AND POLICY_STATUS_DESC NOT IN ('逾期','契撤')
+)O2 ON A.CUSTOMER_ID = O2.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 保險商品Y
+    FROM DM_S_VIEW.M_AT_INSURANCE_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+        AND POLICY_STATUS_DESC NOT IN ('逾期','契撤')
+)B2 ON A.CUSTOMER_ID = B2.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 債券型基金近一年舊戶
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001'  -- 申購
+        AND PROD_STYPE_CODE in ('022','027')  -- 債券型
+        AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+)O3 ON A.CUSTOMER_ID = O3.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 債券型基金Y
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001'  -- 申購
+        AND PROD_STYPE_CODE in ('022','027')  -- 債券型
+        AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+)B3 ON A.CUSTOMER_ID = B3.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 儲蓄型保險商品近一年舊戶
+    FROM DM_S_VIEW.M_AT_INSURANCE_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+        AND POLICY_STATUS_DESC NOT IN ('逾期','契撤')
+        AND PROD_STYPE_CODE = '0L1'
+)O4 ON A.CUSTOMER_ID = O4.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 儲蓄型保險商品Y
+    FROM DM_S_VIEW.M_AT_INSURANCE_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+        AND POLICY_STATUS_DESC NOT IN ('逾期','契撤')
+        AND PROD_STYPE_CODE = '0L1'
+)B4 ON A.CUSTOMER_ID = B4.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 台股信用交易近一年舊戶
+    FROM DM_S_VIEW.M_AC_ACCOUNT_PROD_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE SNAP_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym 
+        AND PROD_TYPE_CODE = '100' --台股
+        AND TXN_TYPE_DETAIL_CODE IN ('005','006','007','008') --信用交易
+)O5 ON A.CUSTOMER_ID = O5.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 台股信用交易Y
+    FROM DM_S_VIEW.M_AC_ACCOUNT_PROD_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE SNAP_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM') 
+        AND PROD_TYPE_CODE = '100' --台股
+        AND TXN_TYPE_DETAIL_CODE IN ('005','006','007','008') --信用交易
+)B5 ON A.CUSTOMER_ID = B5.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 台股定期定額近一年舊戶
+    FROM DM_S_VIEW.M_AT_STOCK_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TO_CHAR(TXN_DATE,'YYYYMM') BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+          AND TXN_TYPE_CODE = '102'
+          AND BUY_SELL_CODE = '001'
+          AND PROD_TYPE_CODE = '100'
+    union
+    (select distinct PARTY_ID_MASK
+        , 1 AS 近一年舊戶 from
+    (select * from dm_s_view.F_S_DC_SETTING where to_char(apply_date,'yyyymm') = :ym and cancel_date is null)a
+    inner join (SELECT DISTINCT acct_nbr,PARTY_ID_MASK FROM DM_S_VIEW.M_AC_ACCOUNT WHERE PROD_TYPE_CODE = '100') b on a.acct_nbr = b.acct_nbr
+    )
+)O6 ON A.CUSTOMER_ID = O6.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 台股定期定額Y
+    FROM DM_S_VIEW.M_AT_STOCK_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TO_CHAR(TXN_DATE,'YYYYMM') BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+        AND TXN_TYPE_CODE = '102'
+        AND BUY_SELL_CODE = '001'
+        AND PROD_TYPE_CODE = '100'
+)B6 ON A.CUSTOMER_ID = B6.CUSTOMER_ID
+
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 基金近一年舊戶
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001'  -- 申購
+        AND PROD_STYPE_CODE != '029' --排除ETF募集
+        AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+    union
+    (select distinct PARTY_ID_MASK PARTY_ID
+         , 1 AS 近一年舊戶 
+    from(select * from dm_s_view.wcd011 where to_char(wcd1103,'yyyymm') = :ym and wcd1118 is null)a
+    inner join dm_s_view.wcb007 b on a.wcd1101 = b.wcb0701
+    INNER JOIN ACC
+    ON B.idno = ACC.PARTY_ID)
+)O7 ON A.CUSTOMER_ID = O7.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 基金Y
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001'  -- 申購
+        AND PROD_STYPE_CODE != '029' --排除ETF募集
+        AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+)B7 ON A.CUSTOMER_ID = B7.CUSTOMER_ID
+
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 基金定期定額近一年舊戶
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001'  -- 申購
+    and txn_type_code = '102'  --定期定額
+    AND PROD_STYPE_CODE != '029' --排除ETF募集
+    AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+    union
+    (select distinct PARTY_ID_MASK PARTY_ID
+         , 1 AS 近一年舊戶 from
+    (select * from dm_s_view.wcd011 where to_char(wcd1103,'yyyymm') between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym and wcd1118 is null)a
+    inner join dm_s_view.wcb007 b on a.wcd1101 = b.wcb0701
+    INNER JOIN ACC
+    ON B.idno = ACC.PARTY_ID)
+)O8 ON A.CUSTOMER_ID = O8.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 基金定期定額Y
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001'  -- 申購
+        and txn_type_code = '102'  --定期定額
+        AND PROD_STYPE_CODE != '029' --排除ETF募集
+        AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+)B8 ON A.CUSTOMER_ID = B8.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 AS 境內結構型近三年舊戶
+    FROM DM_S_VIEW.M_AT_SN_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE PROD_MTYPE_CODE = '540'
+      AND A.BUY_SELL_DESC = '買'
+      AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -35), 'YYYYMM') AND :ym 
+)O9 ON A.CUSTOMER_ID = O9.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 境內結構型Y
+    FROM DM_S_VIEW.M_AT_SN_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE PROD_MTYPE_CODE = '540'
+      AND A.BUY_SELL_DESC = '買'
+      AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+)B9 ON A.CUSTOMER_ID = B9.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 AS 境外結構型近三年舊戶
+    FROM DM_S_VIEW.M_AT_SN_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE PROD_MTYPE_CODE = '240'
+      AND A.BUY_SELL_DESC = '買'
+      AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -35), 'YYYYMM') AND :ym 
+)O10 ON A.CUSTOMER_ID = O10.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 境外結構型Y
+    FROM DM_S_VIEW.M_AT_SN_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE PROD_MTYPE_CODE = '240'
+      AND A.BUY_SELL_DESC = '買'
+      AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+)B10 ON A.CUSTOMER_ID = B10.CUSTOMER_ID
+
+LEFT JOIN (
+    select PARTY_ID_MASK AS CUSTOMER_ID
+       , case when 前季交易量 >= 30000000 then 1 else NULL end AS 客群上送前季高交易量客戶R
+       , case when 前季交易量 >= 100000000 then 1 else NULL end AS 客群上送前季高交易量客戶P
+    from(
+        select PARTY_ID_MASK, sum(txn_amt_twd) as 前季交易量
+        from dm_s_view.m_at_stock_txn A
+        INNER JOIN ACC
+        ON A.PARTY_ID = ACC.PARTY_ID
+        where prod_type_desc = '台股' and txn_yyyymm >= TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -2), 'YYYYMM') and txn_yyyymm <= :ym
+              and branch_name not in ('自營部','營業部','總公司','OSU')  
+        group by PARTY_ID_MASK
+    )
+)O11 ON A.CUSTOMER_ID = O11.CUSTOMER_ID
+LEFT JOIN (
+    select PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 客群上送Y
+    from(
+        select PARTY_ID_MASK, sum(txn_amt_twd) as 來季交易量
+        from dm_s_view.m_at_stock_txn A
+        INNER JOIN ACC
+        ON A.PARTY_ID = ACC.PARTY_ID
+        where prod_type_desc = '台股' and txn_yyyymm >=  TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') and txn_yyyymm <=  TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+              and branch_name not in ('自營部','營業部','總公司','OSU')  
+        group by PARTY_ID_MASK
+    )where 來季交易量 >= 30000000
+)B11 ON A.CUSTOMER_ID = B11.CUSTOMER_ID
+
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 AS 平衡型基金近一年舊戶
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001'  -- 申購
+        AND PROD_STYPE_CODE = '023'  -- 平衡及多重資產型
+        AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+)O12 ON A.CUSTOMER_ID = O12.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 AS 平衡型基金Y
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001'  -- 申購
+        AND PROD_STYPE_CODE = '023'  -- 平衡及多重資產型
+        AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+)B12 ON A.CUSTOMER_ID = B12.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 投資型保險商品近一年舊戶
+    FROM DM_S_VIEW.M_AT_INSURANCE_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+        AND POLICY_STATUS_DESC NOT IN ('逾期','契撤')
+        AND PROD_STYPE_CODE = '0L3'
+)O13 ON A.CUSTOMER_ID = O13.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 投資型保險商品Y
+    FROM DM_S_VIEW.M_AT_INSURANCE_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+        AND POLICY_STATUS_DESC NOT IN ('逾期','契撤')
+        AND PROD_STYPE_CODE = '0L3'
+)B13 ON A.CUSTOMER_ID = B13.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 AS 期貨近一年舊戶
+    FROM DM_S_VIEW.M_AT_FUTURE_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym 
+        AND PROD_TYPE_DESC = '期貨'
+)O14 ON A.CUSTOMER_ID = O14.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 AS 期貨Y
+    FROM DM_S_VIEW.M_AT_FUTURE_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')  
+        AND PROD_TYPE_DESC = '期貨'
+)B14 ON A.CUSTOMER_ID = B14.CUSTOMER_ID
+
+LEFT JOIN (
+    select distinct PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 as 流失預警近一年實動 
+    from DM_S_VIEW.T_DR_CUST_PROD_TXN_ST A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    where snap_yyyymm between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') and :ym
+        and TXN_AMT_TWD>0 
+        and substr(PROD_ID,1,2) = '11'
+)O15 ON A.CUSTOMER_ID = O15.CUSTOMER_ID
+LEFT JOIN (
+    select distinct PARTY_ID_MASK AS CUSTOMER_ID
+        , 0 as 流失預警Y
+    from DM_S_VIEW.T_DR_CUST_PROD_TXN_ST A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    where snap_yyyymm between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') and TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 12), 'YYYYMM')
+        and TXN_AMT_TWD>0 
+        and substr(PROD_ID,1,2) = '11'
+)B15 ON A.CUSTOMER_ID = B15.CUSTOMER_ID
+
+LEFT JOIN (
+    select distinct PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 as 海外股流失預警近一年實動
+    from DM_S_VIEW.T_DR_CUST_PROD_TXN_ST A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    where snap_yyyymm between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') and :ym
+        and TXN_AMT_TWD>0
+        and substr(PROD_ID,1,2) = '21'
+)O15B ON A.CUSTOMER_ID = O15B.CUSTOMER_ID
+LEFT JOIN (
+    select distinct PARTY_ID_MASK AS CUSTOMER_ID
+        , 0 as 海外股流失預警Y
+    from DM_S_VIEW.T_DR_CUST_PROD_TXN_ST A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    where snap_yyyymm between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') and TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 12), 'YYYYMM')
+        and TXN_AMT_TWD>0
+        and substr(PROD_ID,1,2) = '21'
+)B15B ON A.CUSTOMER_ID = B15B.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 海外債近一年舊戶
+    FROM DM_S_VIEW.M_AT_BOND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym 
+        AND A.BUY_SELL_DESC = '買'
+)O16 ON A.CUSTOMER_ID = O16.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 海外債Y
+    FROM DM_S_VIEW.M_AT_BOND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM') 
+        AND A.BUY_SELL_DESC = '買'
+)B16 ON A.CUSTOMER_ID = B16.CUSTOMER_ID
+
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 AS 海外股票近半年舊戶
+    FROM DM_S_VIEW.M_AT_STOCK_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TO_CHAR(TXN_DATE,'YYYYMM') BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -5), 'YYYYMM') AND :ym
+        AND A.BUY_SELL_DESC = '買' AND A.PROD_MTYPE_DESC = '海外股票'
+    union
+    select distinct PARTY_ID_MASK
+        , 1 AS 海外股票近半年舊戶
+    from (select * from dm_s_view.sdri where to_char(ODATE,'yyyymm') = :ym and CDATE is null)a
+    inner join (SELECT DISTINCT acct_nbr,PARTY_ID_MASK FROM DM_S_VIEW.M_AC_ACCOUNT WHERE PROD_TYPE_CODE = '200') b on a.ACNO = SUBSTR(B.ACCT_NBR,0,10)
+)O17 ON A.CUSTOMER_ID = O17.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 海外股票Y
+    FROM DM_S_VIEW.M_AT_STOCK_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TO_CHAR(TXN_DATE,'YYYYMM') BETWEEN  TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+        AND A.BUY_SELL_DESC = '買' AND A.PROD_MTYPE_DESC = '海外股票'
+)B17 ON A.CUSTOMER_ID = B17.CUSTOMER_ID
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 海外股票定期定額近一年舊戶
+    FROM DM_S_VIEW.M_AT_STOCK_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TO_CHAR(TXN_DATE,'YYYYMM') BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+          AND TXN_TYPE_CODE = '102'
+          AND BUY_SELL_CODE = '001'
+          AND PROD_TYPE_CODE = '200'
+    union
+    select distinct PARTY_ID_MASK
+        , 1 AS 海外股票定期定額近一年舊戶 
+    from (select * from dm_s_view.F_S_DC_SETTING where to_char(apply_date,'yyyymm') BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym and cancel_date is null)a
+    inner join (SELECT DISTINCT acct_nbr,PARTY_ID_MASK FROM DM_S_VIEW.M_AC_ACCOUNT WHERE PROD_TYPE_CODE = '200') b on a.acct_nbr = b.acct_nbr
+)O18 ON A.CUSTOMER_ID = O18.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 海外股票定期定額Y
+    FROM DM_S_VIEW.M_AT_STOCK_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TO_CHAR(TXN_DATE,'YYYYMM') BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+          AND TXN_TYPE_CODE = '102'
+          AND BUY_SELL_CODE = '001'
+          AND PROD_TYPE_CODE = '200'
+)B18 ON A.CUSTOMER_ID = B18.CUSTOMER_ID
+
+
+LEFT JOIN (
+    select PARTY_ID_MASK AS CUSTOMER_ID
+       , '' AS 潛在高價值客戶前季高交易量客戶R
+       , case when 前季交易量 >= 100000000 then 1 else NULL end AS 潛在高價值客戶前季高交易量客戶P
+    from(
+        select PARTY_ID_MASK, sum(txn_amt_twd) as 前季交易量
+        from dm_s_view.m_at_stock_txn A
+        INNER JOIN ACC
+        ON A.PARTY_ID = ACC.PARTY_ID
+        where prod_type_desc = '台股' and txn_yyyymm >= TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -2), 'YYYYMM') and txn_yyyymm <= :ym
+              and branch_name not in ('自營部','營業部','總公司','OSU')  
+        group by PARTY_ID_MASK
+    )
+)O19 ON A.CUSTOMER_ID = O19.CUSTOMER_ID
+LEFT JOIN (
+    select PARTY_ID_MASK AS CUSTOMER_ID
+       , case when 來季交易量 >= 100000000 then 1 else NULL end AS 潛在高價值客戶Y
+    from(
+        select PARTY_ID_MASK, sum(txn_amt_twd) as 來季交易量
+        from dm_s_view.m_at_stock_txn A
+        INNER JOIN ACC
+        ON A.PARTY_ID = ACC.PARTY_ID
+        where prod_type_desc = '台股' and txn_yyyymm >=  TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') and txn_yyyymm <=  TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+              and branch_name not in ('自營部','營業部','總公司','OSU')  
+        group by PARTY_ID_MASK
+    )
+)B19 ON A.CUSTOMER_ID = B19.CUSTOMER_ID
+
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 AS 結構型商品近三年舊戶
+    FROM DM_S_VIEW.M_AT_SN_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE A.BUY_SELL_DESC = '買'
+      AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -35), 'YYYYMM') AND :ym 
+)O20 ON A.CUSTOMER_ID = O20.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 結構型商品Y
+    FROM DM_S_VIEW.M_AT_SN_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE A.BUY_SELL_DESC = '買'
+      AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+)B20 ON A.CUSTOMER_ID = B20.CUSTOMER_ID
+
+
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 AS 股票型基金近一年舊戶
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001'  -- 申購
+        AND PROD_STYPE_CODE = '021'  -- 股票型
+        AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+)O21 ON A.CUSTOMER_ID = O21.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        , 1 AS 股票型基金Y
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001'  -- 申購
+        AND PROD_STYPE_CODE = '021'  -- 股票型
+        AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+)B21 ON A.CUSTOMER_ID = B21.CUSTOMER_ID
+
+LEFT JOIN (
+    ------基金申購排除ETF
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        ,1 as 財管商品近一年舊戶
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001' AND PROD_STYPE_CODE != '029'
+    AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+    union ------結構型購買
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        ,1 as 近一年舊戶
+    FROM DM_S_VIEW.M_AT_SN_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    where BUY_SELL_CODE = '001'
+    AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+    union ------海外債購買
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        ,1 as 近一年舊戶
+    FROM DM_S_VIEW.M_AT_BOND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID 
+    where BUY_SELL_CODE = '001'
+    AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+    union ------壽險購買
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        ,1 as 近一年舊戶
+    FROM DM_S_VIEW.M_AT_INSURANCE_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE POLICY_STATUS_DESC NOT IN ('逾期','契撤')
+    AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+    union ------海外股購買
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        ,1 as 近一年舊戶
+    FROM DM_S_VIEW.M_AT_STOCK_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym
+    AND PROD_TYPE_CODE = '200' AND BUY_SELL_CODE = '001'
+    union ------基金定期定額剛簽約
+    (select distinct PARTY_ID_MASK PARTY_ID
+        , 1 AS 近一年舊戶 from
+    (select * from dm_s_view.wcd011 where to_char(wcd1103,'yyyymm') = :ym and wcd1118 is null)a
+    inner join dm_s_view.wcb007 b on a.wcd1101 = b.wcb0701
+    INNER JOIN ACC
+    ON B.idno = ACC.PARTY_ID)
+    union ------海外股定期定額剛簽約
+    (select distinct PARTY_ID_MASK
+        , 1 AS 近一年舊戶 from
+    (select * from dm_s_view.sdri where to_char(ODATE,'yyyymm') = :ym and CDATE is null)a
+    inner join (SELECT DISTINCT acct_nbr,PARTY_ID_MASK FROM DM_S_VIEW.M_AC_ACCOUNT WHERE PROD_TYPE_CODE = '200') b on a.ACNO = SUBSTR(B.ACCT_NBR,0,10)
+    )
+)O22 ON A.CUSTOMER_ID = O22.CUSTOMER_ID
+LEFT JOIN (
+    ------基金購買
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        ,1 as 財管商品Y
+    FROM DM_S_VIEW.M_AT_FUND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE BUY_SELL_CODE = '001' AND PROD_STYPE_CODE != '029'
+    AND TXN_YYYYMM between TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+    union ------結構型購買
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        ,1 as Y
+    FROM DM_S_VIEW.M_AT_SN_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    where BUY_SELL_CODE = '001'
+    AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM') 
+    union ------海外債購買
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        ,1 as Y
+    FROM DM_S_VIEW.M_AT_BOND_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID 
+    where BUY_SELL_CODE = '001'
+    AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+    union ------壽險購買
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        ,1 as Y
+    FROM DM_S_VIEW.M_AT_INSURANCE_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE POLICY_STATUS_DESC NOT IN ('逾期','契撤')
+    AND TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+    union ------海外股購買
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+        ,1 as Y
+    FROM DM_S_VIEW.M_AT_STOCK_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM')
+    AND PROD_TYPE_CODE = '200' AND BUY_SELL_CODE = '001'
+)B22 ON A.CUSTOMER_ID = B22.CUSTOMER_ID
+
+
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 雙向借券近一年舊戶
+    FROM DM_S_VIEW.M_AT_BSBL_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), -11), 'YYYYMM') AND :ym 
+)O23 ON A.CUSTOMER_ID = O23.CUSTOMER_ID
+LEFT JOIN (
+    SELECT DISTINCT PARTY_ID_MASK AS CUSTOMER_ID
+         , 1 AS 雙向借券Y
+    FROM DM_S_VIEW.M_AT_BSBL_TXN A
+    INNER JOIN ACC
+    ON A.PARTY_ID = ACC.PARTY_ID
+    WHERE TXN_YYYYMM BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 1), 'YYYYMM') AND TO_CHAR(ADD_MONTHS(TO_DATE(:ym || '01', 'YYYYMMDD'), 3), 'YYYYMM') 
+)B23 ON A.CUSTOMER_ID = B23.CUSTOMER_ID
+
+WHERE A.YYYYMM = :ym;

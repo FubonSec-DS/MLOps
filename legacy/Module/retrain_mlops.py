@@ -4,9 +4,11 @@
 
 
 #上個版本 retrain_mlops_np_and_p_double_opt_detailym_fillna_20241225
-def retrain_mlops_np_and_p_double_opt_detailym_fillna_20250326(this_file_path, target, papulation_colname, papulation_train_value, drop_key_word,
-                           mother_list, bins_list, hit_rate_list, frequency, edition_detail, do_ym_list, query_function, write_db_Y_N,
-                           limit_size_select, limit_size_build, write_feature_Y_N, market_flag_Y_N):
+def retrain_mlops_np_and_p_double_opt_detailym_fillna_20250326(
+        this_file_path, target, papulation_colname, papulation_train_value, drop_key_word,
+        mother_list, bins_list, hit_rate_list, frequency, edition_detail, do_ym_list, query_function, write_db_Y_N,
+        limit_size_select, limit_size_build, write_feature_Y_N, market_flag_Y_N
+    ):
     import gc
     import sys
 
@@ -4942,29 +4944,3 @@ def retrain_mlops_np_and_p_double_opt_fillna_20250326(this_file_path, target, pa
 
 
 #         print('{} 花了 {} min'.format(mother,(time.time()-totally_st_time)/60))
-
-
-#         del X_train
-#         del y_train
-#         del X_test
-#         del y_test
-#         del df_combined_fubon
-#         del df_combined_jihsun
-#         del vali_predict_df
-#         del df_pred_and_features
-#         gc.collect()
-
-#         print(f'{project_name}_{mother}_{new_edition} 執行完畢，先跳出迴圈!')
-
-
-# In[19]:
-
-
-get_ipython().system('jupyter nbconvert --to script retrain_mlops.ipynb')
-
-
-# In[ ]:
-
-
-
-

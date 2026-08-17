@@ -11,7 +11,8 @@ def main_code():
     import warnings
     from datetime import datetime, timedelta
     warnings.filterwarnings("ignore")
-    sys.path.append('/home/cdsw/Tony/Mlops_new/Module')
+    
+    sys.path.append(r'd:\Louis\MLOps-main\legacy\Module')
     import retrain_mlops
     importlib.reload(retrain_mlops)
     import config

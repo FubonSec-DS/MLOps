@@ -25,6 +25,7 @@ instantclient-23.26/
 
 # Model / Data files
 *.pkl
+model_store/
 
 # Ruff cache
 .ruff_cache/
@@ -35,3 +36,12 @@ instantclient-23.26/
 # Oracle Instant Client
 instantclient-23.26/
 instantclient-*/
+# Generated pretrain inspection reports may contain customer IDs and feature values.
+pretrain_reports/
+
+# Source data extracts contain customer risk factors and financial features.
+data/
+
+# Local snapshots and runtime artifacts
+*.zip
+*.pid

@@ -1,13 +1,93 @@
-# Oracle
+# Non-secret, environment-specific application configuration.
+# Credentials and tokens must be supplied through environment variables or a secret manager.
+
 oracle:
-  instant_client_dir: "instantclient-23.26"
+  instant_client_dir: "D:/Louis/instantclient_23_7"
+  feature_schema: "DS_SEC"
+  population_sampling_schema: "S_IANLEONG"
+  population_sampling_table: "MLOPS_POPULATION_SAMPLING_TEST"
+  population_source_schema: "S_IANLEONG"
+  model_log_schema: "S_IANLEONG"
 
-# Data pipeline
-data_pipeline:
-  test_1: 1000
-  test_2: 2000
+paths:
+  fin_table: "data/df_fin_feats.csv"
+  model_base: "model_store"
 
-# Models
 models:
-  test_1: 100
-  test_2: 200
+  device: "cpu"
+  random_state: 42
+  pretrain_size: 100000
+  top_n_features: 100
+
+features:
+  categorical_columns:
+    CF_PROFILE:
+      - gender_code
+      - edu_desc
+      - postal_rsd_code
+      - postal_hh_code
+      - use_fubon_acct
+      - aml_highrisk_flag
+      - nw_segment_desc
+      - segment_desc
+      - valid_flag
+      - e_acct_valid_flag
+      - emp_flag
+      - pro_invest_flag
+      - aml_risk_desc
+      - kyc_risk_desc
+      - email_flag
+      - line_bc_flag
+      - c_acct_valid_flag
+      - subbrok_acct_open_flag
+      - future_acct_open_flag
+      - trust_acct_open_flag
+    CF_KYCQA:
+      - kycqa_q5
+      - kycqa_q6
+      - kycqa_q7
+      - kycqa_q8
+      - kycqa_q9
+      - kycqa_q10
+      - kycqa_q11
+      - kycqa_q12
+      - kycqa_q13
+      - kycqa_q91
+      - kycqa_q92
+      - kycqa_q93
+      - kycqa_q94
+      - kycqa_q95
+      - kycqa_q96
+      - kycqa_q97
+      - kycqa_q98
+      - kycqa_q81
+      - kycqa_q82
+      - kycqa_q83
+      - kycqa_q84
+      - kycqa_q85
+      - kycqa_q86
+      - kycqa_q87
+      - kycqa_q88
+    CF_EVENT:
+      - histy_segment_desc
+      - compare_histy_segment_desc
+      - once_be_pi_customer
+    CF_JCI:
+      - agent_flag
+    CF_DGT1:
+      - dgt_acct_freqtfct
+      - dgt_stafth_freqtfct
+      - dgt_smtstp_freqtfct
+      - dgt_afthif_freqtfct
+      - dgt_stqt_fqtps
+      - dgt_stdtqt_fqtps
+      - dgt_finnews_fqtps
+      - dgt_stcqt_fqtps
+      - dgt_wa_fqtps
+      - dgt_intf_fqtps
+      - dgt_stqt_fqtps_m
+      - dgt_stdtqt_fqtps_m
+      - dgt_finnews_fqtps_m
+      - dgt_stcqt_fqtps_m
+      - dgt_wa_fqtps_m
+      - dgt_intf_fqtps_m

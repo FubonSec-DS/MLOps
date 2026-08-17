@@ -577,7 +577,6 @@ def feature_dump_202504(yyyymm_lst, sql_table_name_list, feature_file_path,accou
 
 # In[15]:
 
-
 def send_table_to_sql(targ, table_name, account, pwd, exist_action = 'append'):
     dtype_dist = {}
     for col,dtype in targ.dtypes.items():
@@ -596,16 +595,3 @@ def send_table_to_sql(targ, table_name, account, pwd, exist_action = 'append'):
             dtype_dist[col] = Boolean
 
     write_data_to_SQL(table_name=table_name, df = targ, account = account, pwd = pwd,col_types=dtype_dist, exist_action=exist_action)
-
-
-# In[16]:
-
-
-get_ipython().system('jupyter nbconvert --to script Sql_module.ipynb')
-
-
-# In[ ]:
-
-
-
-

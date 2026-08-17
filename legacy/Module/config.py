@@ -157,8 +157,11 @@ colname_catgory_list_202503_2 = ['kycqa_q5', 'kycqa_q6','kycqa_q7','kycqa_q9','k
 # 模型間不需修改
 #MLOPS
 algorithm = 'xgboost'
+# '客群上送','潛在高價值客戶'
 do_ym_list_pd_3m = ['202412','202503','202506','202509','202512']
+# Standard model
 do_ym_list_pd_3m_detail = ['202412','202501','202502','202503','202504','202505','202506','202507','202508','202509','202512']
+# 流失預警
 do_ym_list_pd_12m = ['202403','202406','202409','202412','202503']
 ym = '202603'
 mlops_retrain_day = '20260327'
@@ -191,16 +194,6 @@ n_estimator_a = 100
 max_depth_b = 3
 scale_pos_weight_b = 4
 n_estimator_b = 100
-
-
-# In[6]:
-
-
-get_ipython().system('jupyter nbconvert --to script config.ipynb')
-
-
-# In[ ]:
-
 
 
 

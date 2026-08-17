@@ -1,183 +1,165 @@
-## Getting Started
+# MLOps staged training pipeline
 
-### Prerequisites
+This project prepares Oracle features and populations, selects Top-100 features with an ephemeral pretraining cohort, and trains an XGBoost model with temporal validation and test periods.
 
-Make sure you have the following installed
+## Setup
 
-|                                            | Version |
-| ------------------------------------------ | ------- |
-| Python                                     | 3.12 +  |
-| uv                                         | 0.9 +   |
-| Oracle Instant Client for Windows (64-bit) | 21.3 +  |
+Requirements: Python 3.12+, `uv`, and Oracle Instant Client. Copy `configs/.env.example` to `configs/.env`, supply the DS_MASK password, then run:
 
-### Create Virtual Environment
-
-All required dependencies are listed in the `pyproject.toml` file. To install them, create a virtual environment and run the following command:
-
-```bash
+```powershell
 uv sync
 ```
 
-### Configuration and Environment Variables
+`DS_MASK` is the only runtime database identity. It reads and writes cross-schema objects through grants: the full population is fixed at `S_IANLEONG.MLOPS_POPULATION`, features are under `DS_SEC`, and the training-population snapshot currently uses `S_IANLEONG.MLOPS_POPULATION_SAMPLING_TEST`.
 
-- Configuration `config.json` file are located in the `config` folder. Customize the configuration file according to your needs.
+## Configuration
 
-  ```yaml
-  # Oracle
-  oracle:
-      instant_client_path: "The Dir Path of Oracle Instant Client"
+Non-secret settings are stored in three validated YAML files:
 
-  # Data pipeline
-  data_pipeline:
-      test_1: 1000
-      ...
-  ```
+- `configs/config.yaml`: Oracle schemas, local paths, shared model settings, and feature metadata.
+- `configs/products.yaml`: product catalog, XGBoost profiles, training schedules, sample sizes, bins, and acceptance thresholds.
+- `configs/scripts.yaml`: inputs for each independently executable script.
 
-- Environment variables are defined in the `.env` file. Customize the environment variables according to your needs. Make sure to name the variables with distinguishable prefixes to avoid conflicts .
+`src/common/config.py` and `src/products/config.py` read these files and calculate runtime values such as absolute paths, source-qualified feature names, product columns, and date periods.
 
-  ```bash
-  # Oracle
-  ORACLE_USER=your_oracle_user
-  ORACLE_PASSWORD=your_oracle_password
-  ORACLE_DSN=your_oracle_dsn
+Credentials and tokens must not be added to YAML or Python. Keep the DS_MASK credentials in `configs/.env`, CI/CD secrets, or a secret manager. The sampling schema and table name are non-secret settings in `configs/config.yaml`; changing them moves every sampling read and write together.
 
-  # Other environment variables
-  ...
-  ```
+Sampling and prediction read `S_IANLEONG.MLOPS_POPULATION`. Pretraining and formal training read the configured sampling snapshot table. Every runtime SELECT, INSERT, UPDATE, and DELETE uses DS_MASK.
 
-- After modifying the configuration file, updating `src/common/config.py` BaseModel class to include the new configuration parameters is necessary. This ensures that the application can correctly load and validate the updated configuration settings.
+## Independent stages
 
-## Project Structure
+Table-owner DDL and cross-schema grants are administered separately from application runtime commands. `src/queries/SQLs/setup_population_table.sql` remains a schema-definition reference and must not be run through DS_MASK.
 
-```
-Fubon_MLOps/
-├── .github/                # Instructions and Prompts for GitHub Copilot
-├── pyproject.toml         # Python project configuration file
-├── README.md
-├── configs/
-│   ├── .env               # Environment variables (sensitive information, not to be committed)
-│   └── config.yaml        # Configuration file for the project
-├── instantclient-23.26/   # Oracle Instant Client directory (for Windows)
-├── legacy/                # Old code or scripts
-├── test/                  # Test scripts for fundamental functionalities
-└── src/                   # Core source code of the project
-    ├── common/            # Tools and utilities used across the project
-    │   ├── config.py      # Validation and loading of configuration files
-    │   ├── database.py    # Database connection and query execution
-    │   └── logger.py      # Logging setup and configuration
-    ├── data_pipeline/     # Design your modules or pipeline here ...
-    ├── training/          # Design your modules or pipeline here ...
-    └── sql/               # SQL sripts
-```
+DS_MASK requires direct `SELECT, INSERT, DELETE` grants on both `S_IANLEONG.MLOPS_POPULATION` and the configured sampling table. See `src/queries/SQLs/README.md` for owner/DBA statements. `ALTER` alone is insufficient for the transactional replace workflows.
 
-## Before Commit
+## Architecture
 
-### Linting and Type Checking
+- `configs`: validated environment, product, and training configuration.
+- `src/common`: shared Oracle infrastructure.
+- `src/resources`: feature, population, sampling, dataset-loading workflows, query builders, and SQL assets.
+- `src/models`: preprocessing, training, evaluation, prediction, and artifact persistence.
+- `src/pipelines`: retraining and prediction orchestration.
+- `scripts`: thin, YAML-configured executable entry points.
 
-#### 1. Ruff
+Application modules under `src` use the `src.*` namespace. Root-level packages use
+`configs.*` and `scripts.*`.
 
-Use following command to check for linting errors:
+Set `refresh_features` in `configs/scripts.yaml`, then refresh all DS_SEC feature groups. Set
+`groups` to a list to refresh only selected groups:
 
 ```powershell
-uv run ruff check .  # check all files
-uv run ruff check src\common\config.py  # check specific file
-uv run ruff check . --fix  # check then fix all files
-
-# output
-All checks passed!
-
-# output with errors
-D101 Missing docstring in public class
- --> src\common\database.py:7:7
-7 | class OracleDB:
-  |       ^^^^^^^^
-
-Found 2 errors (1 fixed, 1 remaining).
+uv run python -m scripts.refresh_features
 ```
 
-Use following command to check for formatting:
+Validate the sampled population/features join and preprocessing immediately before
+pretrain XGBoost, without fitting or writing a model:
 
 ```powershell
-uv run ruff format --check --diff .\src # check unformatted code in src folder
-uv run ruff format .\src # format unformatted code in src folder
-
-# output
---- src\common\config.py
-+++ src\common\config.py
-@@ -51,7 +51,8 @@
-
--    with YAML_CONFIG_PATH.open(encoding="utf-8") as file: cfg = yaml.safe_load(file)
-+    with YAML_CONFIG_PATH.open(encoding="utf-8") as file:
-+        cfg = yaml.safe_load(file)
-
-1 file would be reformatted, 2 files already formatted
+uv run python -m scripts.validate_pretrain_readiness
 ```
 
-#### 2. Pyright
+This command also creates `pretrain_reports/{product}/{population}/{yyyymm}/`. Open
+`README.md` in that directory first. The report records the concrete Python class types and
+runtime values, column-level dtypes/NULL counts/examples, the preprocessing vocabulary, and
+five real rows both before and after preprocessing. Change `sample_rows` or `output_dir` in the
+corresponding YAML section when needed. The sample CSVs contain customer
+IDs and feature values, so `pretrain_reports/` is ignored by Git.
 
-Use following command to check for type errors in the project:
+Run only the ephemeral pretrain feature-selection stage (the OOT month is derived but excluded):
 
 ```powershell
+uv run python -m scripts.run_pretrain
+```
+
+The output contains `selected_features.json`, the complete `feature_importance.csv`,
+`preprocessing_schema.json`, and `pretrain_summary.json`. The pretrain estimator itself is
+not persisted.
+`rows_per_month` is an optional development limit so the complete flow can run on a small
+machine; rankings from a limited run are illustrative. Omit it in the production deployment
+to use the complete configured pretrain cohort.
+
+Refresh a mature full-population snapshot without changing the approved business SQL.
+The safe form takes the latest complete label-data month and derives the snapshot using the
+selected product's configured label horizon:
+
+```powershell
+uv run python -m scripts.refresh_population
+
+# Churn uses its configured 12-month label horizon, so this derives snapshot 202506.
+uv run python -m scripts.refresh_population
+```
+
+Both `as_of_ym` and `product` are required in the YAML section. The snapshot
+offset comes from the product's validated configuration, and the command always atomically
+replaces that snapshot month. A snapshot row can contain columns for several products, but
+only product labels whose full observation window ends by the as-of month are mature.
+
+Replace the sampling table with every deterministic training-population snapshot needed for
+model training. The command derives each product's training and validation months from its
+configured schedule, then samples every configured product and population:
+
+```powershell
+uv run python -m scripts.refresh_training_population
+```
+
+To validate one product first:
+
+```powershell
+uv run python -m scripts.refresh_training_population
+```
+
+`ym` is the latest schedule anchor. It is used to derive the required months but is not
+inserted into the training population. Rebuilding is atomic: the existing
+The configured sampling table rows are deleted and all required snapshots are appended in the
+same transaction. A failure rolls the entire replacement back.
+
+`MLOPS_POPULATION.SEGMENT` is the physical source classification and contains only `潛客` or `非潛客`. A model `population` is configured as a set of those source segments: `不分潛客` contains both. The sampling snapshot stores `SOURCE_SEGMENT`, `Y`, and `ELIGIBILITY_TAG`; it does not store the model population name.
+
+By default, `run_retrain` uses `product: null` and `population: null` in
+`configs/scripts.yaml`. This runs every configured population for every product, deriving
+each product's periods from its own training schedule:
+
+```powershell
+uv run python -m scripts.run_retrain
+```
+
+For a test run, set `product` and `population` to one name. Either selector also accepts a
+YAML list for a subset. Explicit `train_yms` and `backtest_ym` apply to every selected job;
+leave them null for product-specific schedule calculation.
+
+Alternatively, set `as_of_ym` and leave `train_yms`/`backtest_ym` null to derive the product's model-building and OOT backtest months. When `as_of_ym` is null, the latest complete data month defaults to the previous calendar month.
+
+Set `write_db: true` only when the existing configured-schema retrain/model log tables should be updated.
+
+The pretraining cohort is not persisted. For each training month it keeps every `y=1` row and deterministically samples `y=0` rows up to the configured 100,000-row target. The OOT backtest month never participates in Top-100 selection or model fitting.
+
+Create the isolated test snapshot with `src/queries/SQLs/create_population_sampling_test.sql` as `S_IANLEONG`, then grant DS_MASK as shown in that file. Existing legacy tables are not modified. Run `src/queries/SQLs/ensure_feature_uniqueness.sql` once as the `DS_SEC` owner after resolving any historical duplicate keys.
+
+## Artifacts
+
+Each `model_store/{product}/{population}/{edition}/` directory contains:
+
+- `model.pickle`
+- `features.json`
+- `feature_importance.csv`
+- `preprocessing.json`
+- `training_summary.json`
+
+Prediction reads this contract and queries only the selected features:
+
+```powershell
+uv run python -m scripts.run_prediction
+```
+
+## Feature handling
+
+- Feature names are source-qualified as `{table}__{column}`.
+- Numeric NULL values remain missing; configured categorical NULL and unknown values are distinct.
+
+Run local checks with:
+
+```powershell
+uv run python -m unittest discover -s tests -v
+uv run ruff check .
 uv run pyright
-
-# output
-0 errors, 0 warnings, 0 informations
-
-# output with errors
-test.py
-  test.py:14:14 - error: Argument of type "Literal['2']" cannot be assigned to parameter "int_2" of type "int" in function "add" ...
-1 error, 0 warnings, 0 informations
 ```
-
-#### 3. Run Tests
-
-After checking out another developer's branch or pulling their changes, run the test suite with:
-
-```powershell
-uv run pytest
-```
-
-To run a specific test file:
-
-```powershell
-uv run pytest test/test_xxx.py
-```
-
-Make sure the database connection settings in `configs/.env` are configured before running database integration tests.
-
-### AI Code Review
-
-#### 1. Code Review
-
-Prompt `.github/prompts/code-review.prompt.md` aims to perform a production-readiness review of all Python files under `src/`. You can trigger the code review process using the slash command `/code-review`.
-
-```markdown
-## Code Review — src/
-
-...
-
-### Medium
-
-database.py
-
-- Description: `query()` doesn’t rollback on failure (only closes connection).
-- Impact: If a query is part of a larger transactional workflow (or session state changes), failures may leave the session in an unexpected state.
-- Recommended Fix: ...
-
-...
-
-### Summary
-
-| Severity | Count |
-| -------- | ----- |
-| Critical | 1     |
-| High     | 2     |
-| Medium   | 2     |
-| Low      | 1     |
-```
-
-#### 2. Security Review
-
-Prompt `.github/prompts/security-review.prompt.md` aims to perform an additional security review of all Python files under `src/`. You can trigger the security review process using the slash command `/security-review`. You can also trigger the security review process with slash command `/security-review` after the code review process is completed.
-
-These prompts are provided primarily for GitHub Copilot, but can be freely adapted into skills, agents, workflows, or custom instructions for other coding assistants such as Claude, Codex, Cursor, or similar tools.
