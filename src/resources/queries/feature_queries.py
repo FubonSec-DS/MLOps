@@ -218,6 +218,28 @@ def build_feature_query(
     else:
         cte = f"WITH {training_cohort}"
         cohort = "TRAINING_COHORT"
+        if row_limit is not None:
+            if row_limit <= 0:
+                raise ValueError("row_limit must be greater than zero")
+            params.update({"hash_seed": settings.models.random_state, "row_limit": row_limit})
+            cte += """
+            , LIMITED_TRAINING_COHORT AS (
+                SELECT CUSTOMER_ID, YYYYMM, Y
+                FROM (
+                    SELECT C.*,
+                           ROW_NUMBER() OVER (
+                               ORDER BY ORA_HASH(
+                                   CUSTOMER_ID || '|' || YYYYMM || '|' || :product || '|training',
+                                   4294967295,
+                                   :hash_seed
+                               ), CUSTOMER_ID
+                           ) AS TRAINING_RN
+                    FROM TRAINING_COHORT C
+                )
+                WHERE TRAINING_RN <= :row_limit
+            )
+            """
+            cohort = "LIMITED_TRAINING_COHORT"
     tables = tuple(dict.fromkeys(column.table.upper() for column in selected))
     aliases = {table: f"T{index}" for index, table in enumerate(tables)}
 

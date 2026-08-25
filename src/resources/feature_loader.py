@@ -159,12 +159,20 @@ def load_training_month(
     *,
     catalog: list[FeatureColumn] | None = None,
     database: OracleDB | None = None,
+    row_limit: int | None = None,
 ) -> LoadedDataset:
     """Load selected features for one training month."""
     db = database or get_query_database()
     feature_catalog = catalog or discover_feature_catalog(db)
     oracle_columns, fin_columns = _resolve_selected_columns(selected_features, feature_catalog)
-    sql, params = build_feature_query(config, ym, population, oracle_columns, pretrain=False)
+    sql, params = build_feature_query(
+        config,
+        ym,
+        population,
+        oracle_columns,
+        pretrain=False,
+        row_limit=row_limit,
+    )
     frame = _append_fin_features(_to_pandas(db.query(sql, params)), ym, fin_columns)
     selected_frame = cast("pd.DataFrame", frame.loc[:, [*MODEL_COLUMNS, *selected_features]])
     return LoadedDataset(selected_frame, _categorical_features(oracle_columns))

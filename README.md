@@ -24,13 +24,13 @@ Non-secret settings are stored in three validated YAML files:
 
 Credentials and tokens must not be added to YAML or Python. Keep the DS_MASK credentials in `configs/.env`, CI/CD secrets, or a secret manager. The sampling schema and table name are non-secret settings in `configs/config.yaml`; changing them moves every sampling read and write together.
 
-Sampling and prediction read `S_IANLEONG.MLOPS_POPULATION`. Pretraining and formal training read the configured sampling snapshot table. Every runtime SELECT, INSERT, UPDATE, and DELETE uses DS_MASK.
+Sampling and prediction read `S_IANLEONG.MLOPS_POPULATION`. Pretraining and formal training read the configured sampling snapshot table. Every runtime database operation uses DS_MASK.
 
 ## Independent stages
 
 Table-owner DDL and cross-schema grants are administered separately from application runtime commands. `src/queries/SQLs/setup_population_table.sql` remains a schema-definition reference and must not be run through DS_MASK.
 
-DS_MASK requires direct `SELECT, INSERT, DELETE` grants on both `S_IANLEONG.MLOPS_POPULATION` and the configured sampling table. See `src/queries/SQLs/README.md` for owner/DBA statements. `ALTER` alone is insufficient for the transactional replace workflows.
+DS_MASK requires direct `SELECT, INSERT, DELETE` grants on `S_IANLEONG.MLOPS_POPULATION`, and direct `SELECT, INSERT` grants on the append-only sampling table. See `src/queries/SQLs/README.md` for owner/DBA statements.
 
 ## Architecture
 
@@ -94,9 +94,9 @@ offset comes from the product's validated configuration, and the command always 
 replaces that snapshot month. A snapshot row can contain columns for several products, but
 only product labels whose full observation window ends by the as-of month are mature.
 
-Replace the sampling table with every deterministic training-population snapshot needed for
+Ensure the sampling table contains every deterministic training-population snapshot needed for
 model training. The command derives each product's training and validation months from its
-configured schedule, then samples every configured product and population:
+configured schedule, then checks every configured product and population:
 
 ```powershell
 uv run python -m scripts.refresh_training_population
@@ -109,15 +109,16 @@ uv run python -m scripts.refresh_training_population
 ```
 
 `ym` is the latest schedule anchor. It is used to derive the required months but is not
-inserted into the training population. Rebuilding is atomic: the existing
-The configured sampling table rows are deleted and all required snapshots are appended in the
-same transaction. A failure rolls the entire replacement back.
+inserted into the training population. Existing usable snapshots are reused without DML; only
+missing snapshots are inserted. A snapshot that exists without both target classes fails
+validation and is left unchanged. All new snapshots are committed atomically, and a failure
+rolls back every insert from that run.
 
 `MLOPS_POPULATION.SEGMENT` is the physical source classification and contains only `潛客` or `非潛客`. A model `population` is configured as a set of those source segments: `不分潛客` contains both. The sampling snapshot stores `SOURCE_SEGMENT`, `Y`, and `ELIGIBILITY_TAG`; it does not store the model population name.
 
-By default, `run_retrain` uses `product: null` and `population: null` in
-`configs/scripts.yaml`. This runs every configured population for every product, deriving
-each product's periods from its own training schedule:
+When `run_retrain` uses `product: null` and `population: null` in `configs/scripts.yaml`, it
+runs every configured population for every product, deriving each product's periods from its
+own training schedule:
 
 ```powershell
 uv run python -m scripts.run_retrain
@@ -130,6 +131,10 @@ leave them null for product-specific schedule calculation.
 Alternatively, set `as_of_ym` and leave `train_yms`/`backtest_ym` null to derive the product's model-building and OOT backtest months. When `as_of_ym` is null, the latest complete data month defaults to the previous calendar month.
 
 Set `write_db: true` only when the existing configured-schema retrain/model log tables should be updated.
+
+For a development-only end-to-end run, set `rows_per_month` to a positive integer. The pipeline then takes a
+deterministic hash sample of that size from every pretrain, formal-training, and OOT backtest month. Leave it `null`
+for a production model; the training summary records whether a development limit was used.
 
 The pretraining cohort is not persisted. For each training month it keeps every `y=1` row and deterministically samples `y=0` rows up to the configured 100,000-row target. The OOT backtest month never participates in Top-100 selection or model fitting.
 
@@ -144,6 +149,12 @@ Each `model_store/{product}/{population}/{edition}/` directory contains:
 - `feature_importance.csv`
 - `preprocessing.json`
 - `training_summary.json`
+- `business_metrics.csv`: Top 5%/10%/20% hit rate, recall, and lift.
+- `score_deciles.csv`: ten ranked score groups from highest to lowest risk.
+- `model_card.md`: a concise Chinese summary for model-performance presentations.
+
+The training summary and model card include sample size, churn rate, AUC, KS, the train/OOT AUC gap,
+and the Top-10 important features. Reports contain aggregate metrics only and no customer IDs.
 
 Prediction reads this contract and queries only the selected features:
 

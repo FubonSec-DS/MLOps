@@ -80,6 +80,7 @@ def main() -> None:
             train_yms=train_yms,
             backtest_ym=backtest_ym,
             edition=config.edition,
+            rows_per_month=config.rows_per_month,
             write_db=config.write_db,
         )
         results.append(result)

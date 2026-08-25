@@ -17,7 +17,8 @@ from configs.configs_val.DB_configs import get_settings
 from configs.configs_val.product_config import ProductConfig, get_product_config
 from src.models.evaluation import check_retrain_passed, evaluate
 from src.models.preprocessing import PreprocessingSchema, apply_preprocessing, fit_preprocessing
-from src.models.training import fit_xgboost, save_model, select_top_features
+from src.models.reporting import performance_summary, write_performance_report
+from src.models.training import feature_importance, fit_xgboost, save_model, select_top_features
 from src.models.versioning import save_retrain_outputs
 from src.resources.feature_loader import (
     LoadedDataset,
@@ -425,6 +426,7 @@ def _write_artifacts(
     importance.to_csv(artifact_dir / "feature_importance.csv", index=False)
     _write_json(artifact_dir / "preprocessing.json", preprocessing.to_dict())
     _write_json(artifact_dir / "training_summary.json", summary)
+    write_performance_report(artifact_dir, summary, importance)
 
 
 def run_retrain(
@@ -434,10 +436,13 @@ def run_retrain(
     train_yms: list[str],
     backtest_ym: str,
     edition: str,
+    rows_per_month: int | None = None,
     write_db: bool = False,
 ) -> RetrainResult:
     """Run feature selection, formal training, and one untouched OOT backtest."""
     _validate_periods(train_yms, backtest_ym)
+    if rows_per_month is not None and rows_per_month <= 0:
+        raise ValueError("rows_per_month must be greater than zero")
     config = get_product_config(product)
     settings = get_settings()
     artifact_dir = settings.paths.model_base / product / population / edition
@@ -448,7 +453,16 @@ def run_retrain(
     catalog = discover_feature_catalog()
 
     # ----------- pretrain ----------------
-    pretrain_months = [load_pretrain_month(config, population, ym, catalog=catalog) for ym in train_yms]
+    pretrain_months = [
+        load_pretrain_month(
+            config,
+            population,
+            ym,
+            catalog=catalog,
+            row_limit=rows_per_month,
+        )
+        for ym in train_yms
+    ]
     pretrain_data = combine_months(pretrain_months)
 
     for dataset in pretrain_months:
@@ -481,20 +495,31 @@ def run_retrain(
         device=settings.models.device,
         random_state=settings.models.random_state,
     )
-    selected_features, importance = select_top_features(
+    selected_features, _selection_importance = select_top_features(
         pretrain_model,
         candidates,
         top_n=settings.models.top_n_features,
     )
 
     # ----------- 訓練 ----------------
-    train_months = [load_training_month(config, population, ym, selected_features, catalog=catalog) for ym in train_yms]
+    train_months = [
+        load_training_month(
+            config,
+            population,
+            ym,
+            selected_features,
+            catalog=catalog,
+            row_limit=rows_per_month,
+        )
+        for ym in train_yms
+    ]
     backtest_data = load_training_month(
         config,
         population,
         backtest_ym,
         selected_features,
         catalog=catalog,
+        row_limit=rows_per_month,
     )
     train_data = combine_months(train_months)
     X_train, preprocessing = fit_preprocessing(
@@ -518,6 +543,7 @@ def run_retrain(
         device=settings.models.device,
         random_state=settings.models.random_state,
     )
+    final_importance = feature_importance(model, selected_features)
     train_evaluation = evaluate(model, X_train, y_train, config.bins, config.rank_bins)
     backtest_evaluation = evaluate(model, X_backtest, y_backtest, config.bins, config.rank_bins)
     passed = check_retrain_passed(backtest_evaluation.auc)
@@ -537,6 +563,10 @@ def run_retrain(
             "backtest_ym": backtest_ym,
         },
         "feature_count": len(selected_features),
+        "development_sample": {
+            "rows_per_month": rows_per_month,
+            "limited": rows_per_month is not None,
+        },
         "pretrain_months": [_month_summary(item) for item in pretrain_months],
         "training_months": [_month_summary(item) for item in train_months],
         "backtest": _month_summary(backtest_data),
@@ -546,18 +576,14 @@ def run_retrain(
             "device": settings.models.device,
             "random_state": settings.models.random_state,
         },
-        "metrics": {
-            "train_auc": train_evaluation.auc,
-            "backtest_auc": backtest_evaluation.auc,
-            "backtest_levels": backtest_evaluation.level_metrics,
-        },
+        "metrics": performance_summary(train_evaluation, backtest_evaluation),
         "passed": passed,
     }
     _write_artifacts(
         artifact_dir,
         model=model,
         selected_features=selected_features,
-        importance=importance,
+        importance=final_importance,
         preprocessing=preprocessing,
         summary=summary,
     )

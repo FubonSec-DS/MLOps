@@ -47,7 +47,7 @@ class RefreshPopulationConfig(_StrictModel):
 
 
 class RefreshTrainingPopulationConfig(_StrictModel):
-    """Training-population rebuild inputs."""
+    """Append-only training-population snapshot inputs."""
 
     ym: YearMonth
     product: tuple[str, ...] | None
@@ -82,6 +82,7 @@ class RunRetrainConfig(_StrictModel):
     backtest_ym: YearMonth | None
     as_of_ym: YearMonth | None
     edition: str = Field(min_length=1)
+    rows_per_month: int | None = Field(default=None, ge=1)
     write_db: bool
 
     @field_validator("product", "population")

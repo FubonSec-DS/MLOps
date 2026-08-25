@@ -85,6 +85,7 @@ class RetrainScriptTests(TestCase):
                     train_yms=["A01"],
                     backtest_ym="202506",
                     edition="v1",
+                    rows_per_month=None,
                     write_db=False,
                 ),
                 call(
@@ -93,6 +94,7 @@ class RetrainScriptTests(TestCase):
                     train_yms=["A01"],
                     backtest_ym="202506",
                     edition="v1",
+                    rows_per_month=None,
                     write_db=False,
                 ),
                 call(
@@ -101,6 +103,7 @@ class RetrainScriptTests(TestCase):
                     train_yms=["B01"],
                     backtest_ym="202506",
                     edition="v1",
+                    rows_per_month=None,
                     write_db=False,
                 ),
             ],

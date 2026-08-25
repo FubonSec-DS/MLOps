@@ -63,15 +63,19 @@ class OracleDB:
         self,
         query: str,
         params: dict[str, Any] | None = None,
+        *,
+        connection: oracledb.Connection | None = None,
     ) -> pl.DataFrame:
         """Execute a SELECT and return a Polars DataFrame."""
-        with self.connection() as connection:
-            return pl.read_database(
-                query,
-                connection,
-                infer_schema_length=None,
-                execute_options={"parameters": params} if params else None,
-            )
+        if connection is None:
+            with self.connection() as owned_connection:
+                return self.query(query, params, connection=owned_connection)
+        return pl.read_database(
+            query,
+            connection,
+            infer_schema_length=None,
+            execute_options={"parameters": params} if params else None,
+        )
 
     def require_table_privileges(
         self,

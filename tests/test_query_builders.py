@@ -208,6 +208,21 @@ class QueryBuilderTests(unittest.TestCase):
         self.assertIn("|readiness", sql)
         self.assertEqual(params["row_limit"], 1_000)
 
+    def test_training_limit_is_deterministic_and_bound(self) -> None:
+        config = get_product_config("海外股流失預警")
+        sql, params = build_feature_query(
+            config,
+            "202504",
+            "不分潛客",
+            [FeatureColumn("CF_PROFILE", "AGE", "NUMBER")],
+            pretrain=False,
+            row_limit=10_000,
+        )
+        self.assertIn("LIMITED_TRAINING_COHORT", sql)
+        self.assertIn("TRAINING_RN <= :row_limit", sql)
+        self.assertIn("|training", sql)
+        self.assertEqual(params["row_limit"], 10_000)
+
     def test_population_sql_uses_the_configured_real_columns(self) -> None:
         """Protect against the old nonexistent eligibility-column suffix."""
         sql = read_sql("refresh_population_table.sql")

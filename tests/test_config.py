@@ -56,10 +56,14 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(scripts.refresh_population.as_of_ym, "202606")
         self.assertEqual(scripts.refresh_population.product, "流失預警")
+        self.assertEqual(scripts.refresh_training_population.ym, "202607")
+        self.assertIsNotNone(scripts.refresh_training_population.product)
+        self.assertIn("海外股流失預警", scripts.refresh_training_population.product or ())
         self.assertFalse(scripts.run_retrain.write_db)
-        self.assertIsNone(scripts.run_retrain.product)
-        self.assertIsNone(scripts.run_retrain.population)
+        self.assertEqual(scripts.run_retrain.product, "海外股流失預警")
+        self.assertEqual(scripts.run_retrain.population, "不分潛客")
         self.assertIsNone(scripts.run_retrain.train_yms)
+        self.assertEqual(scripts.run_retrain.rows_per_month, 2_500)
         self.assertEqual(resolve_project_path(scripts.run_pretrain.output_dir).name, "pretrain_reports")
 
     def test_standard_two_stage_periods_use_latest_complete_month(self) -> None:

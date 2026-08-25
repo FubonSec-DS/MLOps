@@ -8,9 +8,9 @@ refresh_population:
   product: "流失預警"
 
 refresh_training_population:
-  ym: "202606"
+  ym: "202607"
   # Use null for every configured product, or list one or more product names.
-  product: null
+  product: ["海外股流失預警", "流失預警"]
 
 run_prediction:
   product: "海外股流失預警"
@@ -24,20 +24,22 @@ run_pretrain:
   product: "流失預警"
   population: "不分潛客"
   # Use null in production to load the complete configured cohort.
-  rows_per_month: null
+  rows_per_month: 2500
   output_dir: "pretrain_reports"
 
 run_retrain:
   # null = every configured product; use a name or a list for a test subset.
   # product: ["流失預警", "海外股流失預警"]
-  product: null
+  product: "海外股流失預警"
   # null = every population configured for each selected product.
-  population: null
+  population: "不分潛客"
   # Leave both values null to derive periods from as_of_ym and the product schedule.
   train_yms: null
   backtest_ym: null
   as_of_ym: "202607"
-  edition: "v1"
+  edition: "flow-test-20260824"
+  # Development-only deterministic limit. Use null for a production model.
+  rows_per_month: 2500
   write_db: false
 
 validate_pretrain_readiness:

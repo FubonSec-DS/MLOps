@@ -26,7 +26,7 @@
 由 S_IANLEONG owner／DBA 執行 `create_population_sampling_test.sql` 建立隔離測試表。該檔案同時提供 DS_MASK 以下 runtime 權限：
 
 ```sql
-GRANT SELECT, INSERT, DELETE
+GRANT SELECT, INSERT
 ON S_IANLEONG.MLOPS_POPULATION_SAMPLING_TEST TO DS_MASK;
 
 GRANT SELECT, INSERT, DELETE
@@ -35,7 +35,7 @@ ON S_IANLEONG.MLOPS_POPULATION TO DS_MASK;
 
 若測試表已經存在，先由 S_IANLEONG owner 執行 `allow_combined_sampling_segment.sql`，讓特殊商品可將客群標記保存為「不分潛客」。
 
-`DELETE` 是 replace 流程必要權限；不可用 `ALTER`／`TRUNCATE` 代替，因為 DDL 的隱含 commit 會破壞整批失敗時的 rollback。
+完整母體仍採月份 replace，所以需要 `DELETE`。訓練抽樣表採 append-only，只需要 `SELECT, INSERT`；既有快照不會由 runtime 修改或刪除。
 
 若未來要沿用既有四欄正式表，才需要由 table owner 執行：
 

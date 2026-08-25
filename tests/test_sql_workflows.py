@@ -44,4 +44,5 @@ class SQLWorkflowTests(unittest.TestCase):
         self.assertIn("ELIGIBILITY_TAG NUMBER(1) NOT NULL", sql)
         self.assertIn("'不分潛客'", sql)
         self.assertIn("USING INDEX COMPRESS 3", sql)
-        self.assertIn("GRANT SELECT, INSERT, DELETE", sql)
+        self.assertIn("GRANT SELECT, INSERT", sql)
+        self.assertNotIn("GRANT SELECT, INSERT, DELETE", sql)
